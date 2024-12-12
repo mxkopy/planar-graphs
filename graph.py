@@ -6,6 +6,9 @@ class Weights:
     graph_type = None
     weights = {}
 
+    def order_edge(self, edge):
+        return min(edge[0], edge[1], key=self.graph_type.hash_node), max(edge[0], edge[1], key=self.graph_type.hash_node)
+
     def __init__(self, graph_type, weights={}):
         self.graph_type = graph_type
         self.weights = weights
@@ -14,13 +17,28 @@ class Weights:
         return self.weights[self.graph_type.order_edge(edge)]
     
     def __setitem__(self, edge, value):
-        self.weights[self.graph_type.order_edge(edge)] = value
+        if self.graph_type.is_admissible(edge):
+            self.weights[self.graph_type.order_edge(edge)] = value
+        else:
+            raise KeyError(f"Attempted to set an inadmissible edge {edge} to the graph.")
+
+    def __delitem__(self, edge):
+        del self.weights[edge]
 
     def __contains__(self, edge):
         return self.graph_type.order_edge(edge) in self.weights.keys()
+    
+    def __iter__(self):
+        return iter(self.weights)
 
-    def order_edge(self, edge):
-        return min(edge[0], edge[1], key=self.graph_type.hash_node), max(edge[0], edge[1], key=self.graph_type.hash_node)
+    def values(self):
+        return self.weights.values()
+    
+    def keys(self):
+        return self.weights.keys()
+    
+    def edges(self):
+        return self.keys()
 
     def nodes(self):
         return set([x for x, _ in self.weights] + [y for _, y in self.weights])
@@ -30,12 +48,19 @@ class Weights:
 
 class SolidGridGraph:
 
-    weights = {}
+    weights: Weights
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
     def hash_node(node):
         return 2**(node[0]+1) + 3**(node[1]+1)
     
+    def is_admissible(edge):
+        u, v = edge
+        for (dx, dy) in SolidGridGraph.directions:
+            if u[0] + dx == v[0] and u[1] + dy == v[1]:
+                return True
+        return False
+
     def order_edge(edge):
         return min(edge[0], edge[1], key=SolidGridGraph.hash_node), max(edge[0], edge[1], key=SolidGridGraph.hash_node)
 
@@ -162,6 +187,7 @@ class SolidGridGraph:
                         weights[edge] = 1
     
     def __init__(self, num_edges, m=10, n=10):
+        self.weights = Weights(SolidGridGraph)
         self.m = m
         self.n = n
         self.weights = {}
@@ -198,15 +224,24 @@ class SolidGridGraph:
         self.plt.show()
 
 
+weights = Weights(SolidGridGraph)
+
+weights[(0, 0), (1, 0)] = 1
+weights[(0, 1), (1, 1)] = 1
+weights[(1, 1), (2, 2)] = 1
+
+
+for k in weights:
+    print(k)
 # print(SolidGridGraph.not_holey(sgg.weights))
 # print(len(sgg.weights))
 # print(sgg.weights)
 
-sgg = SolidGridGraph(0)
-SolidGridGraph.add_random_face(sgg.weights, 10, 10)
-SolidGridGraph.add_random_face(sgg.weights, 10, 10)
+# sgg = SolidGridGraph(0)
+# SolidGridGraph.add_random_face(sgg.weights, 10, 10)
+# SolidGridGraph.add_random_face(sgg.weights, 10, 10)
 # print(len(sgg.weights))
 # for edge in sgg.weights:
 #     print(edge, sgg.weights[edge])
 
-sgg.display()
+# sgg.display()
