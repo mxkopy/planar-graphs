@@ -1,115 +1,346 @@
-import random
+import random, copy
+from typing import Union, TypeVar, Generic
 
-# nodes are defined as 2-int tuples associated with an integer weight
-class Weights: 
+from math import atan2, degrees
 
-    graph_type = None
-    weights = {}
+class Node(tuple):
 
-    def order_edge(self, edge):
-        return min(edge[0], edge[1], key=self.graph_type.hash_node), max(edge[0], edge[1], key=self.graph_type.hash_node)
+    def __new__(cls, *value, edges=[]):
+        node = super(Node, cls).__new__(cls, value)
+        node.edges = edges
+        return node
 
-    def __init__(self, graph_type, weights={}):
-        self.graph_type = graph_type
-        self.weights = weights
+    def __add__(self, offset):
+        return Node(*(self[i] + o for i, o in enumerate(offset)), edges=self.edges)
+
+    def __sub__(self, offset):
+        return Node(*(self[i] - o for i, o in enumerate(offset)), edges=self.edges)
+
+    def __gt__(self, other):
+        for v, o in zip(self.value, other):
+            if not v > o:
+                return False
+        return True
+
+    def __lt__(self, other):
+        for v, o in zip(self.value, other):
+            if not v < o:
+                return False
+        return True
+    
+    def __ge__(self, other):
+        return self == other or self > other
+ 
+    def __le__(self, other):
+        return self == other or self < other
+
+
+class Edge:
+
+    s: Node
+    t: Node
+    w: int
+    d: bool
+
+    def __init__(self, s, t, w=True, d=False):
+        self.s = s if isinstance(s, Node) else Node(*s)
+        self.t = t if isinstance(t, Node) else Node(*t)
+        self.w = w
+        self.d = d
+        self.s.edges.append(self)
+        self.t.edges.append(self)
+
+    def __hash__(self):
+        if self.d:
+            return hash((self.s, self.t, self.w))
+        else:
+            return hash(((min(self.s, self.t, key=hash)), (max(self.s, self.t, key=hash)), self.w))
+
+    def __eq__(self, other):
+        if isinstance(other, Edge):
+            if other.d != self.d:
+                return hash(Edge(self.s, self.t, w=self.w, d=False)) == hash(Edge(other.s, other.t, w=other.w, d=False))
+        return hash(self) == hash(other)
+    
+    def __getitem__(self, idx):
+        return [self.s, self.t, self.w, self.d][idx]
+        # if idx != 0 and idx != 1:
+        #     raise IndexError(f"Attempted to get item {idx} in edge.") 
+        # else:
+        #     if idx == 0:
+        #         return self.s
+        #     else: 
+        #         return self.t
+    
+    def __contains__(self, node):
+        return self.s == Node(*node) or self.t == Node(*node)
+            
+    def __str__(self):
+        return f"({self.s}, {self.t})" if self.w is True else f"({self.s}, {self.t}, w={self.w})"
+    
+    def __repr__(self):
+        return (self.s, self.t).__repr__() if self.w is True else (self.s, self.t, self.w).__repr__()
+
+    def other(self, node):
+        if self.s == Node(*node):
+            return self.t
+        elif self.t == Node(*node):
+            return self.s
+        else:
+            raise KeyError(f'Attempted to find other endpoint to ${node} in edge ${self}')
+        
+    def switch(self):
+        return Edge(self.t, self.s, w=self.w, d=self.d)
+
+    def axis(self):
+        x = self.t[0] - self.s[0]
+        y = self.t[1] - self.s[1]
+        return degrees(atan2(y, x))
+
+
+class EdgeSet(dict):
+
+    nodes: set[Node]
+
+    def __init__(self, edges=[]):
+        self.nodes = set()
+        for edge in edges:
+            self[edge] = True if not isinstance(edge, Edge) else edge.w
 
     def __getitem__(self, edge):
-        return self.weights[self.graph_type.order_edge(edge)]
+        edge = edge if isinstance(edge, Edge) else Edge(*edge)
+        return super().__getitem__(edge)
+
+    def __setitem__(self, edge, w, d=False):
+        edge = Edge(edge[0], edge[1], w=w, d=d)
+        super().__setitem__(edge, edge)
+        self.nodes.add(edge.s)
+        self.nodes.add(edge.t)
+
+    # somewhat costly
+    # can be ameliorated by keeping track of connected edges in the node object
+    def __delitem__(self, edge):
+        super().__delitem__(Edge(*edge))
+        for node in edge:
+            if sum([node in edge for edge in self]) == 0:
+                self.nodes.pop(node)
+
+    def __contains__(self, x):
+        if isinstance(x, Node):
+            for edge in self:
+                if x in self:
+                    return True
+            return False
+        else:
+            return super().__contains__(Edge(*edge))
     
-    def __setitem__(self, edge, value):
-        if self.graph_type.is_admissible(edge):
-            self.weights[self.graph_type.order_edge(edge)] = value
+    def __repr__(self):
+        return list(self.keys()).__repr__()
+    
+    def __str__(self):
+        return list(self.keys()).__str__()
+
+    def copy(self):
+        return self.__class__(edges=copy.deepcopy(list(self)))
+
+class Graph(EdgeSet):
+
+    def __setitem__(self, edge, weight):
+        if self.is_admissible_edge(edge):
+            super().__setitem__(edge, weight)
         else:
             raise KeyError(f"Attempted to set an inadmissible edge {edge} to the graph.")
-
-    def __delitem__(self, edge):
-        del self.weights[edge]
-
-    def __contains__(self, edge):
-        return self.graph_type.order_edge(edge) in self.weights.keys()
     
-    def __iter__(self):
-        return iter(self.weights)
+    def is_admissible_edge(self, edge):
+        return True
 
-    def values(self):
-        return self.weights.values()
-    
-    def keys(self):
-        return self.weights.keys()
-    
-    def edges(self):
-        return self.keys()
+    def neighbors(self, node):
+        return [edge.other(Node(*node)) for edge in self if node in edge]
 
-    def nodes(self):
-        return set([x for x, _ in self.weights] + [y for _, y in self.weights])
-    
-    def copy(self):
-        return Weights(self.graph_type, weights=self.weights.copy())
-
-class SolidGridGraph:
-
-    weights: Weights
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-
-    def hash_node(node):
-        return 2**(node[0]+1) + 3**(node[1]+1)
-    
-    def is_admissible(edge):
-        u, v = edge
-        for (dx, dy) in SolidGridGraph.directions:
-            if u[0] + dx == v[0] and u[1] + dy == v[1]:
-                return True
-        return False
-
-    def order_edge(edge):
-        return min(edge[0], edge[1], key=SolidGridGraph.hash_node), max(edge[0], edge[1], key=SolidGridGraph.hash_node)
-
-    def neighbors(node, weights):
-        return [(node[0] + dx, node[1] + dy) for (dx, dy) in SolidGridGraph.directions if SolidGridGraph.contains((node, (node[0] + dx, node[1] + dy)), weights)]
-
-    def contains(edge, weights):
-        return SolidGridGraph.order_edge(edge) in weights
-    
-    def nodes_from_weights(weights):
-        return set([x for x, _ in weights] + [y for _, y in weights])
-
-    def paths_iterator(paths, weights, filter=lambda path: len(path) == len(set(path))):
+    def paths_iterator(self, paths, filter=lambda path: len(path) == len(set(path))):
         next = []
         for path in paths:
-            for n in SolidGridGraph.neighbors(path[-1], weights):
+            for n in self.neighbors(path[-1]):
                 new_path = path + [n]
                 if filter(new_path):
                     next.append(new_path)
         if len(next) > 0:
             yield next
-            yield from SolidGridGraph.paths_iterator(next, weights, filter=filter)
+            yield from self.paths_iterator(next, filter=filter)
         else:
             return None
 
-    def paths(src, weights, filter=lambda path: len(path) == len(set(path))):
-        yield from SolidGridGraph.paths_iterator([[src]], weights, filter=filter)
+    def paths(self, src, filter=lambda path: len(path) == len(set(path)) ):
+        yield from self.paths_iterator([[src]], filter=filter)
 
-    def cycles(src, weights):
-        for paths in SolidGridGraph.paths(src, weights, filter=lambda path: len(path[:-1]) == len(set(path[:-1]))):
+    def cycles(self, src):
+        for paths in self.paths(src, filter=lambda path: len(path[:-1]) == len(set(path[:-1]))):
             yield list(filter(lambda path: path[-1] == src, paths))
 
-    def dijkstra(src, weights):
-        nodes = SolidGridGraph.nodes_from_weights(weights)
+    def vertex_sequence_to_edges(path):
+        return [Edge(path[i], path[i+1], d=True) for i in range(len(path)-1)]
+
+    def src_sink_paths(self, src, sink, filter=lambda path: len(Graph.vertex_sequence_to_edges(path)) == len(set(Graph.vertex_sequence_to_edges(path)))):
+        for paths in self.paths(src, filter=filter):
+            for path in paths:
+                if path[-1] == sink:
+                    yield Graph.vertex_sequence_to_edges(path)
+
+
+    def make_bipartite(self):
+        src = list(self.nodes)[0]
+        src.color = 0
+        L, R = [], []
+        D = set([src])
+        Q = [src]
+        while len(Q) > 0:
+            x = Q.pop()
+            for neighbor in self.neighbors(x):
+                neighbor.color = not x.color
+                if neighbor not in D:
+                    Q.append(neighbor)
+                    D.add(neighbor)
+            D.add(x)
+        for node in D:
+            if node.color == 0:
+                L.append(node)
+            else:
+                R.append(node)
+        return L, R, D
+
+    def hungarian_method(self):
+
+        # Creates an initial matching and alternating tree
+        M = []
+        S = []
+        T = []
+
+        # Gets the partitions of the graph
+        X, Y, D = self.make_bipartite(list(self.nodes)[0])
+        if set(X + Y) != D or len(X) != len(Y):
+            return None
+
+        # Turns the graph into a complete bipartite graph
+        complete_graph = Graph(edges=list(self))
+        for l in X:
+            for r in Y:
+                if (l, r) not in complete_graph:
+                    complete_graph[l, r] = 0
+
+        # Creates an initial labeling
+        labeling = {
+            **{y: 0 for y in Y},
+            **{x: max(edge.w for edge in complete_graph if x in edge) for x in X}
+        }
+
+        def compute_equality_graph():
+            return Graph(edges=[edge for edge in complete_graph if labeling[edge.s] + labeling[edge.t] == edge.w])
+    
+        equality_graph = compute_equality_graph()
+
+        def is_perfect_matching():
+            for node in self.nodes:
+                is_included = [node in edge for edge in M]
+                if sum(is_included) != 1:
+                    return False
+            return True
+
+        def is_free(y):
+            for edge in M:
+                if y in edge:
+                    return False
+            return True
+
+        def neighbors():
+            return set(sum([equality_graph.neighbors(node) for node in S], start=[]))
+
+        def neighbors_without_T():
+            return [node for node in neighbors() if node not in T]
+
+        def improve_labeling():
+            a = max(labeling.values())
+            for s in S:
+                for y in neighbors_without_T():
+                    a = min(a, labeling[s] + labeling[y] - self[s, y].w)
+            for v in S:
+                labeling[v] = labeling[v] - a
+            for v in T:
+                labeling[v] = labeling[v] + a
+
+        def matching_node(y):
+            for edge in M:
+                if y in edge:
+                    return edge.other(y)
+            return None
+
+        def free_vertex():
+            free_vertices = [x for x in X if is_free(x)]
+            if len(free_vertices) == 0:
+                return None
+            else:
+                return free_vertices[0]
+
+        def augment_M(y):
+
+            def longest_alternating_path(path, S, T):
+                neighbors = [node for node in equality_graph.neighbors(path[-1]) if node not in path and node in S]
+                for x in neighbors:
+                    next_path = longest_alternating_path(path + [x], T, S)
+                    if len(next_path) == len(S) + len(T) + 1:
+                        return next_path
+                return path
+
+            path = longest_alternating_path([y], S, T)
+        
+            for edge in M[:]:
+                s, t = edge
+                if s in path or t in path:
+                    M.remove(edge)
+
+            for i in range(0, len(path), 2):
+                edge = Edge(path[i], path[i+1])
+                M.append(edge)
+
+        S.append(free_vertex())
+        while not is_perfect_matching():
+            len_EG, len_M, len_S = len(equality_graph), len(M), len(S), 
+            N = neighbors_without_T()
+            if len(N) == 0:
+                improve_labeling()
+                equality_graph.clear()
+                equality_graph.update(compute_equality_graph())
+            else:
+                y = N[0]
+                if is_free(y):
+                    augment_M(y)
+                    S.clear()
+                    T.clear()
+                    S.append(free_vertex())
+                else:
+                    z = matching_node(y)
+                    S.append(z)
+                    T.append(y)
+            if len(equality_graph) == len_EG and len(M) == len_M and len(S) == len_S:
+                return None
+        return M
+
+    def dijkstra(self, src):
+        nodes = list(self.nodes)
         D = {x: 0 if x == src else float('inf') for x in nodes}
         P = {src: src}
         Q = set(nodes)
         while len(Q) > 0:
             x = min(Q, key=lambda node: D[node])
             Q.remove(x)
-            for y in filter(lambda y: y in Q, SolidGridGraph.neighbors(x, weights)):
-                alt = D[x] + weights[SolidGridGraph.order_edge((x, y))]
+            for y in filter(lambda y: y in Q, self.neighbors(x, self)):
+                alt = D[x] + self[x, y]
                 if alt < D[y]:
                     D[y] = alt
                     P[y] = x
         return D, P
         
-    def shortest_path(src, dest, weights):
-        _, p = SolidGridGraph.dijkstra(src, weights)
+    def shortest_path(self, src, dest):
+        _, p = self.dijkstra(src)
         if dest in p.keys():
             path = [dest]
             x = dest
@@ -117,85 +348,110 @@ class SolidGridGraph:
                 x = p[x]
                 path.append(x)
             path.reverse()
-            return path
+            return self.vertex_sequence_to_edges(path)
         return None
 
-    def shortest_cycle(src, weights):
+    def shortest_cycle(self, src):
         cycle = None
-        for n in SolidGridGraph.neighbors(src, weights):
-            weights_ = weights.copy()
-            del weights_[SolidGridGraph.order_edge((src, n))]
-            sp = SolidGridGraph.shortest_path(src, n, weights_)
+        for n in self.neighbors(src, self):
+            graph = self.copy()
+            del graph[src, n]
+            sp = graph.shortest_path(src, n)
             if sp is not None:
                 if cycle is None or len(sp) < len(cycle):
                     cycle = sp + [src]
         return cycle
 
-    def not_holey(weights):
-        nodes = SolidGridGraph.nodes_from_weights(weights)        
-        for node in nodes:
-            cycle_iterator = SolidGridGraph.cycles(node, weights)
-            four_cycles = [[SolidGridGraph.order_edge(cycle[i:i+2]) for i in range(len(cycle)-2)] for cycle in list(zip(cycle_iterator, range(4)))[-1][0]]
+    def hamiltonian_paths(self, src):
+        paths_iterator = self.paths(src)
+        hamiltonian_paths = []
+        for paths in paths_iterator:
+            for path in paths:
+                if len(path) == len(self.nodes):
+                    hamiltonian_paths.append(Graph.vertex_sequence_to_edges(path))
+        return hamiltonian_paths
+
+    def hamiltonian_cycles(self):
+        nodes = list(self.nodes)
+        cycle_iterator = self.cycles(nodes[0])
+        hc_cycles = []
+        for cycles in cycle_iterator:
+            for cycle in filter(lambda cycle: len(set(cycle)) == len(set(nodes)), cycles):
+                hc_cycles.append(cycle)
+        return [Graph.vertex_sequence_to_edges(cycle) for cycle in hc_cycles]
+
+    def tours(self):
+        src    = list(self.nodes)[0]
+        filter = lambda path: len(Graph.vertex_sequence_to_edges(path)) == len(set(Graph.vertex_sequence_to_edges(path)))
+        for paths in self.paths(src, filter=filter):
+            for path in paths:
+                if len(set(path)) == len(self.nodes) and path[-1] == path[0]:
+                    yield path
+
+    def travelling_salesman_tours(self):
+        travelling_salesman_tours = []
+        for tour in self.tours():
+            if len(travelling_salesman_tours) == 0 or len(travelling_salesman_tours[0]) == len(tour):
+                travelling_salesman_tours.append(Graph.vertex_sequence_to_edges(tour))
+            if len(travelling_salesman_tours[0]) < len(tour):
+                return travelling_salesman_tours
+
+class SolidGridGraph(Graph):
+
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]    
+
+    def is_admissible_edge(self, edge):
+        edge = Edge(*edge)
+        s, t = edge
+        for d in SolidGridGraph.directions:
+            if s + d == t:
+                return True
+        return False
+
+    def neighbors(self, node: Node):
+        return [node + direction for direction in SolidGridGraph.directions if node + direction in self.nodes]
+
+    # if the number of unique four-cycles is less than four, 
+    # there should not be a cycle using edges from the missing four-cycles
+    def not_holey(graph: Graph):
+        for node in graph.nodes:
+            cycle_iterator = graph.cycles(node)
+            four_cycles = [[tuple(cycle[i:i+2]) for i in range(len(cycle)-2)] for cycle in list(zip(cycle_iterator, range(4)))[-1][0]]
             if len(four_cycles) < 4:
                 for cycles in cycle_iterator:
                     for cycle in cycles:
-                        cycle_edges = [SolidGridGraph.order_edge(cycle[i:i+2]) for i in range(len(cycle)-2)]
+                        cycle_edges = [tuple(cycle[i:i+2]) for i in range(len(cycle)-2)]
                         for four_cycle in four_cycles:
                             if len(set(four_cycle) & set(cycle_edges)) == 0:
                                 return False
         return True
 
-    def hamiltonian_cycles(weights):
-        nodes = list(SolidGridGraph.nodes_from_weights(weights))
-        cycle_iterator = SolidGridGraph.cycles(nodes[0], weights)
-        hc_cycles = []
-        for cycles in cycle_iterator:
-            for cycle in filter(lambda cycle: len(set(cycle)) == len(set(nodes)), cycles):
-                hc_cycles.append(cycle)
-        return hc_cycles
-    
-    def make_face(node, dx, dy):
-        
-        # c - b
-        # |   |
-        # n - a
-    
-        a = (node[0] + dx, node[1])
-        b = (node[0] + dx, node[1] + dy)
-        c = (node[0], node[1] + dy) 
-
-        return [SolidGridGraph.order_edge(edge) for edge in [
+    def make_face(node: Node, dx: int, dy: int):
+        a = node + (dx, 0)
+        b = node + (dx, dy)
+        c = node + (0, dy)
+        return [
             (node, a),
             (node, c),
             (a, b),
             (c, b)
-        ]]
+        ]
 
-    def add_random_face(weights, m, n):
-        num_edges_before = len(weights)
-        nodes = [(0, 0)] if len(weights) == 0 else list(SolidGridGraph.nodes_from_weights(weights))
+    def add_random_face(graph: Graph, m: int, n: int):
+        num_edges_before: int = len(graph)
+        nodes: list[Node] = [Node(0, 0)] if len(graph) == 0 else list(graph.nodes)
         random.shuffle(nodes)
-        while len(weights) == num_edges_before:
-            node = nodes.pop()
+        while len(graph) == num_edges_before:
+            node: Node = nodes.pop()
             directions = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
             random.shuffle(directions)
             while len(directions) > 0:
-                dx, dy = directions.pop()   
-                if 0 <= node[0]+dx and node[0]+dx <= m and 0 <= node[1]+dy and node[1]+dy <= n:
-                    face = SolidGridGraph.make_face(node, dx, dy)
-                    for edge in face:
-                        weights[edge] = 1
-    
-    def __init__(self, num_edges, m=10, n=10):
-        self.weights = Weights(SolidGridGraph)
-        self.m = m
-        self.n = n
-        self.weights = {}
-        while len(self.weights) < num_edges:
-            for _ in range(num_edges - len(self.weights)):
-                SolidGridGraph.add_random_face(self.weights, self.m, self.n)
+                dx, dy = directions.pop()
+                if (0, 0) <= node + (dx, dy) <= (m, n):
+                    for edge in SolidGridGraph.make_face(node, dx, dy):
+                        graph[edge] = 1
 
-    def init_display(self):
+    def init_plt(self):
         import matplotlib.pyplot as plt
         try:
             return self.fig, self.ax, self.plt
@@ -203,45 +459,53 @@ class SolidGridGraph:
             self.plt = plt
             self.fig, self.ax = self.plt.subplots()
             self.ax.set_axis_off()
-            self.ax.set_xlim(-1, max(x for (x, _) in SolidGridGraph.nodes_from_weights(self.weights)) + 1 )
-            self.ax.set_ylim(-1, max(y for (_, y) in SolidGridGraph.nodes_from_weights(self.weights)) + 1 )
+            self.ax.set_xlim(-1, max(x for (x, _) in self.nodes) + 1 )
+            self.ax.set_ylim(-1, max(y for (_, y) in self.nodes) + 1 )
+            self.plt.edges = []
+            self.plt.nodes = []
             return self.fig, self.ax, self.plt
 
     def display_edges(self, edges, **kwargs):
         for edge in edges:
-            self.plt.plot( [edge[0][0], edge[1][0]], [edge[0][1], edge[1][1]] , **kwargs)
+            s, t = edge
+            s_x, s_y = s
+            t_x, t_y = t
+            plot_edge = self.plt.plot([s_x, t_x], [s_y, t_y] , **kwargs)
+            self.plt.edges.append(*plot_edge)
 
     def display_nodes(self, nodes, **kwargs):
         for node in nodes:
             circle = self.plt.Circle(node, 0.05, **kwargs)
-            self.ax.add_patch(circle)
+            plot_node = self.ax.add_patch(circle)
+            self.plt.nodes.append(plot_node)
 
-    def display(self):
-        self.init_display()
-        self.display_edges(self.weights.keys(), color='black')
-        self.display_nodes(SolidGridGraph.nodes_from_weights(self.weights), color='red')
+    def init_display(self):
+        self.init_plt()
+        self.display_edges(self.keys(), color='black')
+        self.display_nodes(self.nodes, color='black')
+
+    def show(self):
         self.plt.gca().set_aspect('equal')
         self.plt.show()
 
-
-weights = Weights(SolidGridGraph)
-
-weights[(0, 0), (1, 0)] = 1
-weights[(0, 1), (1, 1)] = 1
-weights[(1, 1), (2, 2)] = 1
+    def display(self):
+        self.init_display()
+        self.show()
 
 
-for k in weights:
-    print(k)
-# print(SolidGridGraph.not_holey(sgg.weights))
-# print(len(sgg.weights))
-# print(sgg.weights)
+# goal: find longest cycle for some solid grid graph
+# subgoal: test hypothesis 
+# - the longest cycle is in the union of two maximally disjoint maximum matchings 
 
-# sgg = SolidGridGraph(0)
-# SolidGridGraph.add_random_face(sgg.weights, 10, 10)
-# SolidGridGraph.add_random_face(sgg.weights, 10, 10)
-# print(len(sgg.weights))
-# for edge in sgg.weights:
-#     print(edge, sgg.weights[edge])
+class GraphIterator(SolidGridGraph):
 
-# sgg.display()
+    def __init__(self, edges=[]):
+        super().__init__(edges=edges)
+        self.node = Node(0, 0)
+
+    def node_iterator(self, node=Node(0, 0)):
+        node = Node(node[1] + 1, 0) if node[0] == 0 else Node(node[0] - 1, node[1] + 1)
+        yield node
+        yield from self.node_iterator(node=node)
+ 
+
