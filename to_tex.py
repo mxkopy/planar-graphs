@@ -7,12 +7,17 @@ class TikZStr(str):
 
 class TiKZOptions(dict):
     def str(self):
-        return ', '.join([f"{key}={str(self[key])}" if self[key] is not None else str(self[key]) for key in self.keys()])
+        return ', '.join([f"{key}={str(self[key])}" if self[key] is not None else str(key) for key in self.keys()])
 
 class TikZNode(Node):
 
     style = TiKZOptions({
-        'fill': 'white'
+        'circle': None,
+        'draw': None,
+        'black': None,
+        'solid': None,
+        'fill': 'white',
+        'scale': 0.5
     })
 
     def __new__(cls, *args, edges=[], label='', style={}):
@@ -25,6 +30,8 @@ class TikZNode(Node):
         return f"{str(self)} node[{self.style.str()}] {{{self.label}}}"
 
 class TikZEdge(Edge):
+
+    ARROW_ANGLE = 45
 
     drawargs = TiKZOptions({
         'line width': '2pt'
@@ -40,7 +47,7 @@ class TikZEdge(Edge):
         # TODO: make Edge generic so we don't have to do this
         s = TikZNode(*s) if not isinstance(s, TikZNode) else s
         t = TikZNode(*t) if not isinstance(t, TikZNode) else t
-        super().__init__(s, t, w, d)
+        super().__init__(s, t, w=w, d=d)
         self.style = TiKZOptions({**TikZEdge.style, **style})
         self.drawargs = TiKZOptions({**TikZEdge.drawargs, **drawargs})
 
@@ -49,9 +56,7 @@ class TikZEdge(Edge):
 
 
 class TeXGraph(Graph):
-
-    ARROW_ANGLE = 45
-
+    
     UNDIRECTED_BLACK = lambda edge: TikZEdge(*edge)
 
     DIRECTED = lambda edge: TikZEdge(
@@ -59,49 +64,89 @@ class TeXGraph(Graph):
         edge.t,
         w=edge.w,
         d=True,
+        style={
+            **edge.style,
+            '->': None
+        }
     )
 
     GRAY = lambda edge: TikZEdge(
         *edge,
-        stle={
+        style={
+            **edge.style,
             'color': 'gray'
         }
     )
 
     SHORT = lambda edge: TikZEdge(
         *edge,
-        style=edge.style.update({
+        style={
+            **edge.style,
             'shorten <': '8'
-        })
+        }
     )
 
     DOTTED = lambda edge: TikZEdge(
         *edge,
-        style=edge.style.update({
+        style={
+            **edge.style,
             'dotted': None
-        })
+        }
     )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def BIPARTITE(self):
+        # if not hasattr(self, 'L') or not hasattr(self, 'R'):
+        self.L, self.R, _ = self.make_bipartite()
+        s, t = 0, 0
+        for edge in self:
+            if edge.s in self.R:
+                s += 1
+                edge.s.style['fill'] = 'black'
+            if edge.t in self.R:
+                t += 1
+                edge.t.style['fill'] = 'black'
+        # print(len(self.nodes))
+        # print(s, t)
+
+    def __init__(self, edges=[], *args, **kwargs):
+        edges = [TikZEdge(*edge) for edge in edges]
+        super().__init__(edges=edges, *args, **kwargs)
         self.edgesets = []
+        self.background = []
+        self.foreground = []
 
     def add_edges(self, *args):
         for edges in args:
             self.edgesets.append(edges)
+            for edge in edges:
+                # pass
+                edge.s = self[edge.switch() if edge not in self else edge].same(edge.s)
+                edge.t = self[edge.switch() if edge not in self else edge].same(edge.t)
+
+    def add_background(self, *args):
+        self.background += args
+
+    def add_foreground(self, *args):
+        self.foreground += args
 
     def tikz_paths(self, exclude_previous=True):
         paths = []
-        previous_edges = set([])
+        previous_edges = set()
         for edges in self.edgesets:
             for edge in edges:
-                if exclude_previous and edge not in previous_edges:
+                if edge.d and edge.switch() in edges:
+                    edge.drawargs['line width'] = '1.75pt'
+                    edge.style['out'] = edge.axis() + TikZEdge.ARROW_ANGLE
+                    edge.style['in'] = edge.switch().axis() - TikZEdge.ARROW_ANGLE
+                if edge not in previous_edges or not exclude_previous:
                     paths.append(edge.str())
+                edge.d = False
+            for edge in edges:
                 previous_edges.add(edge)
         return paths
 
     def str(self):
-        return f"{chr(92)}begin{{tikzpicture}}{chr(10)}{chr(10).join(self.tikz_paths())}{chr(10)}{chr(92)}end{{tikzpicture}}"
+        return f"{chr(92)}begin{{tikzpicture}}{chr(10)}{chr(10).join(self.background + self.tikz_paths() + self.foreground)}{chr(10)}{chr(92)}end{{tikzpicture}}"
     
     def write(self, name):
         file = open(f'../draft/examples/{name}.tex', 'w')
@@ -152,6 +197,8 @@ def make_tex(graph, styles=[], line_width='2pt'):
     for style, get_edges in styles:
         edges = set(get_edges(graph)).difference(previous_edges)
         for edge in edges:
+            # edge.d = False
+            # previous_edges.add(edge)
             previous_edges.add(Edge(edge.s, edge.t, w=edge.w, d=False))
             if edge.d and edge.switch() in edges:
                 edge_strings.append(edge_str(edge,          style=[f'out={edge.axis()+ARROW_ANGLE}', f'in={edge.switch().axis()-ARROW_ANGLE}', *style], line_width='1.75pt'))

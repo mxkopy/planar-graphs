@@ -50,16 +50,17 @@ class Edge:
         self.s.edges.append(self)
         self.t.edges.append(self)
 
+    # TODO: we want unique directed edges to have unique hashes, but point hash to a single undirected equivalent
     def __hash__(self):
         if self.d:
-            return hash((self.s, self.t, self.w))
+            return hash((self.s, self.t))
         else:
-            return hash(((min(self.s, self.t, key=hash)), (max(self.s, self.t, key=hash)), self.w))
+            return hash((min(self.s, self.t, key=hash), max(self.s, self.t, key=hash)))
 
     def __eq__(self, other):
         if isinstance(other, Edge):
-            if other.d != self.d:
-                return hash(Edge(self.s, self.t, w=self.w, d=False)) == hash(Edge(other.s, other.t, w=other.w, d=False))
+            if other.d and self.d:
+                return hash((self.s, self.t)) == hash((other.s, other.t))
         return hash(self) == hash(other)
     
     def __getitem__(self, idx):
@@ -89,18 +90,45 @@ class Edge:
         else:
             raise KeyError(f'Attempted to find other endpoint to ${node} in edge ${self}')
         
+    def same(self, node):
+        if self.s == Node(*node):
+            return self.s
+        elif self.t == Node(*node):
+            return self.t
+        else:
+            raise KeyError(f'Attempted to find same endpoint as ${node} in edge ${self}')
+        
     def switch(self):
-        return Edge(self.t, self.s, w=self.w, d=self.d)
+        return self.__class__(self.t, self.s, *self[2:])
 
     def axis(self):
         x = self.t[0] - self.s[0]
         y = self.t[1] - self.s[1]
         return degrees(atan2(y, x))
 
+class assign:
+    pass
+
+class setdict(dict):
+
+    def __setitem__(self, key, value):
+        if key in self:
+            del self[key]
+        super(dict, self).__setitem__(key, value)
+
+    def __getitem__(self, key, operation):
+        if operation is assign:
+            self.__setitem__(key, key) 
+        return self[key]
+
+    def __init__(self, *args):
+        super().__init__(self)
+        for arg in args:
+            self[arg]
 
 class EdgeSet(dict):
 
-    nodes: set[Node]
+    nodes: dict[Node]
 
     def __init__(self, edges=[]):
         self.nodes = set()
@@ -112,13 +140,16 @@ class EdgeSet(dict):
         return super().__getitem__(edge)
 
     def __setitem__(self, edge, w, d=False):
-        edge = Edge(edge[0], edge[1], w=w, d=d)
+        if isinstance(edge, Edge):
+            edge.w = w
+            edge.d = d
+        else:
+            edge = Edge(*edge, w=w, d=d)
         super().__setitem__(edge, edge)
         self.nodes.add(edge.s)
         self.nodes.add(edge.t)
 
-    # somewhat costly
-    # can be ameliorated by keeping track of connected edges in the node object
+    # TODO: see if you can use the fact that connected edges are kept track of in nodes to make this more efficient
     def __delitem__(self, edge):
         super().__delitem__(Edge(*edge))
         for node in edge:
@@ -132,7 +163,7 @@ class EdgeSet(dict):
                     return True
             return False
         else:
-            return super().__contains__(Edge(*edge))
+            return super().__contains__(x)
     
     def __repr__(self):
         return list(self.keys()).__repr__()
@@ -155,7 +186,7 @@ class Graph(EdgeSet):
         return True
 
     def neighbors(self, node):
-        return [edge.other(Node(*node)) for edge in self if node in edge]
+        return [edge.other(node) for edge in self if node in edge]
 
     def paths_iterator(self, paths, filter=lambda path: len(path) == len(set(path))):
         next = []
@@ -177,9 +208,9 @@ class Graph(EdgeSet):
         for paths in self.paths(src, filter=lambda path: len(path[:-1]) == len(set(path[:-1]))):
             yield list(filter(lambda path: path[-1] == src, paths))
 
-    def vertex_sequence_to_edges(path):
-        return [Edge(path[i], path[i+1], d=True) for i in range(len(path)-1)]
-
+    def vertex_sequence_to_edges(sequence):
+        return [(sequence[i], sequence[i+1]) for i in range(len(sequence)-1)]
+    
     def src_sink_paths(self, src, sink, filter=lambda path: len(Graph.vertex_sequence_to_edges(path)) == len(set(Graph.vertex_sequence_to_edges(path)))):
         for paths in self.paths(src, filter=filter):
             for path in paths:
@@ -348,7 +379,7 @@ class Graph(EdgeSet):
                 x = p[x]
                 path.append(x)
             path.reverse()
-            return self.vertex_sequence_to_edges(path)
+            return Graph.vertex_sequence_to_edges(path)
         return None
 
     def shortest_cycle(self, src):

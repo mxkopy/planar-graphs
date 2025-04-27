@@ -27,8 +27,26 @@ def extract_graph(model, graph):
         return EdgeSet(edges=[edge for edge in graph if model.solution[str(edge)] == 1.0])
     return EdgeSet(edges=[])
 
+
+# L, R = make_bipartite()
+# sum(x_{ij}) for i in L <= 1
+# sum(x_{ij}) for j in R <= 1
+
+def find_bipartite_matching(graph):
+    model = Model(name='bipartite_matching')
+    xs = {}
+    xvs = { node: [] for node in graph.nodes }
+    L, R, _ = graph.make_bipartite()
+
+    for edge in graph:
+        id = str(edge)
+        u, v = edge
+        xs[edge] = model.integer_var(name=id)
+        xvs[u].append()
+    
+
 def find_two_factor(graph):
-    model = Model(name='model')
+    model = Model(name='two_factor')
     xs = {}
     xvs = {node: [] for node in graph.nodes}
     for edge in graph:
@@ -85,6 +103,8 @@ def make_example(fname, n=10):
 # graph.add_random_face(10, 10)
 # graph.add_random_face(10, 10)
 # graph.add_random_face(10, 10)
+
+
 
 # print(graph.hamiltonian_cycles())
 
