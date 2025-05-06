@@ -1,29 +1,45 @@
 import random, copy
 from typing import Union, TypeVar, Generic
-
-from math import atan2, degrees
+from math import atan2, degrees, fmod, sqrt, pow, sin, cos, radians
+from docplex.mp.model import Model
 
 class Node(tuple):
 
     def __new__(cls, *value, edges=[]):
+        while isinstance(value, tuple) and len(value) == 1:
+            value = value[0]
         node = super(Node, cls).__new__(cls, value)
         node.edges = edges
         return node
 
-    def __add__(self, offset):
-        return Node(*(self[i] + o for i, o in enumerate(offset)), edges=self.edges)
+    def __add__(self, other):
+        if isinstance(other, Node) or isinstance(other, tuple):
+            return Node(*(self[i]+o for i, o in enumerate(other)), edges=self.edges)
+        elif isinstance(other, Edge):
+            return other+self
+        else:
+            return Node(*(i+other for i in self), edges=self.edges)
 
-    def __sub__(self, offset):
-        return Node(*(self[i] - o for i, o in enumerate(offset)), edges=self.edges)
+    def __sub__(self, other):
+        if isinstance(other, Node) or isinstance(other, tuple):
+            return Node(*(self[i]-o for i, o in enumerate(other)), edges=self.edges)
+        else:
+            return Node(*(i-other for i in self), edges=self.edges)
+
+    def __mul__(self, other):
+        if isinstance(other, Node) or isinstance(other, tuple):
+            return Node(*(self[i]*o for i, o in enumerate(other)))
+        else:
+            return Node(*(i*other for i in self))
 
     def __gt__(self, other):
-        for v, o in zip(self.value, other):
+        for v, o in zip(self, other):
             if not v > o:
                 return False
         return True
 
     def __lt__(self, other):
-        for v, o in zip(self.value, other):
+        for v, o in zip(self, other):
             if not v < o:
                 return False
         return True
@@ -42,10 +58,9 @@ class Edge:
     w: int
     d: bool
 
-    def __init__(self, s, t, w=True, d=False):
+    def __init__(self, s, t, d=False):
         self.s = s if isinstance(s, Node) else Node(*s)
         self.t = t if isinstance(t, Node) else Node(*t)
-        self.w = w
         self.d = d
         self.s.edges.append(self)
         self.t.edges.append(self)
@@ -59,12 +74,12 @@ class Edge:
 
     def __eq__(self, other):
         if isinstance(other, Edge):
-            if other.d and self.d:
+            if self.d and other.d:
                 return hash((self.s, self.t)) == hash((other.s, other.t))
         return hash(self) == hash(other)
     
     def __getitem__(self, idx):
-        return [self.s, self.t, self.w, self.d][idx]
+        return [self.s, self.t][idx]
         # if idx != 0 and idx != 1:
         #     raise IndexError(f"Attempted to get item {idx} in edge.") 
         # else:
@@ -74,111 +89,309 @@ class Edge:
         #         return self.t
     
     def __contains__(self, node):
-        return self.s == Node(*node) or self.t == Node(*node)
+        return self.s == node or self.t == node
             
     def __str__(self):
-        return f"({self.s}, {self.t})" if self.w is True else f"({self.s}, {self.t}, w={self.w})"
+        return f"({self.s}, {self.t})"
     
     def __repr__(self):
-        return (self.s, self.t).__repr__() if self.w is True else (self.s, self.t, self.w).__repr__()
+        return (self.s, self.t).__repr__()
+
+    def __add__(self, other):
+        if isinstance(other, Edge):
+            return Edge(self.s+other.s, self.t+other.t)
+        elif isinstance(other, Node):
+            return Edge(self.s+other, self.t+other)
+        else:
+            raise ValueError(f"Attempted to add {type(other)} to an edge")
+        # if isinstance(other, Node):
+        #     return Edge(self.s+other, self.t+other)
+        # elif isinstance(other, Edge):
+        #     return Edge(self.s+other.s, self.t+other.t)
+        # else:
+        #     raise ValueError(f"Attempted to add {type(other)} to an edge")
+
+    def meets(self, other):
+        if not self.d or not other.self.d:
+            return self.s if self.s in other else self.t
+        else:
+            return self.s if self.s == other.t else self.t if self.t == other.t else None
 
     def other(self, node):
-        if self.s == Node(*node):
+        if self.s == node:
             return self.t
-        elif self.t == Node(*node):
+        elif self.t == node:
             return self.s
         else:
             raise KeyError(f'Attempted to find other endpoint to ${node} in edge ${self}')
         
     def same(self, node):
-        if self.s == Node(*node):
-            return self.s
-        elif self.t == Node(*node):
-            return self.t
-        else:
-            raise KeyError(f'Attempted to find same endpoint as ${node} in edge ${self}')
-        
+        return self.other(self.other(node))
+
     def switch(self):
         return self.__class__(self.t, self.s, *self[2:])
 
+    def dist(self):
+        d = self.t - self.s
+        return sqrt((d[0]*d[0])+(d[1]*d[1]))
+
+    # TODO: make this radians by default
     def axis(self):
         x = self.t[0] - self.s[0]
         y = self.t[1] - self.s[1]
         return degrees(atan2(y, x))
+    
+    def axis_in_radians(self):
+        x = self.t[0] - self.s[0]
+        y = self.t[1] - self.s[1]
+        return atan2(y, x)
+    
+    def direction(self):
+        return Edge(self.s-self.s, self.t-self.s)
+    
+    def rotate(self, degrees):
+        degrees = radians(degrees)
+        u = self.direction()
+        v = u.t*(cos(degrees), sin(degrees))
+        w = u.t*(sin(degrees), cos(degrees))
+        d = (v[0]-v[1], w[0]+w[1])
+        if isinstance(self.s[0], int):
+            d = round(d[0]), round(d[1])
+        return Edge(self.s, self.s+d)
+
+    def rotate_right(self):
+        return self.rotate(-90)
+    
+    def rotate_left(self):
+        return self.rotate(90)
+
+    def take_right(self):
+        return self.t+self.rotate(-90).direction()
+    
+    def take_left(self):
+        return self.t+self.rotate(90).direction()
+
+    def go_forward(self):
+        return self+self.direction().t
+
+    def parallel_right(self):
+        d = self.direction()
+        r = self.rotate(-90)
+        return r.t+d
+    
+    def parallel_left(self):
+        d = self.direction()
+        l = self.rotate(90)
+        return l.t+d
+
+    # Determines if a line segment from point a to b intersects with an edge. If so, returns the point at which it does. 
+    # Solution ripped from an old graphics homework. 
+    def intersect(self, a, b):
+        s = (-self.s[1]*a[0]+self.s[1]*b[0]+self.s[0]*a[1]-self.s[0]*b[1]+b[1]*a[0]-b[0]*a[1])/(-self.s[1]*a[0]+self.t[1]*a[0]+self.s[1]*b[0]-self.t[1]*b[0]+self.s[0]*a[1]-self.t[0]*a[1]-self.s[0]*b[1]+self.t[0]*b[1])
+        t = ((self.t[0]-self.s[0])*(a[1]-self.s[1])-(self.t[1]-self.s[1])*(a[0]-self.s[0]))/((self.t[0]-self.s[0])*(a[1]-b[1])-(self.t[1]-self.s[1])*(a[0]-b[0]))
+        if 0.0 < s and 0.0 < 1.0 and  0.0 < t and t < 1.0:
+            return (self.s[0] + (s * (self.t[0] - self.s[0])), self.s[1] + (s * (self.t[1] - self.s[1])))
+        return None
+    
+    def midpoint(self):
+        return (self.s[0]+self.t[0])/2, (self.s[1]+self.t[1])/2
+    
 
 class assign:
     pass
 
+def opunpack(cls):
+    getitem = cls.__getitem__
+    def getter(self, key, op=None):
+        if isinstance(key, tuple) and len(key) > 1 and key[1] is assign:
+            return getitem(self, key[0], op=key[1])
+        else:
+            return getitem(self, key, op=op)
+    cls.__getitem__ = getter
+    return cls
+
+@opunpack
 class setdict(dict):
 
     def __setitem__(self, key, value):
         if key in self:
             del self[key]
-        super(dict, self).__setitem__(key, value)
+        super(setdict, self).__setitem__(key, value)
 
-    def __getitem__(self, key, operation):
-        if operation is assign:
-            self.__setitem__(key, key) 
-        return self[key]
+    # def keys(self):
+    #     return self.values()
+
+    def __getitem__(self, key, op=None):
+        if op is assign and key not in self:
+            super(setdict, self).__setitem__(key, key)
+        return super().__getitem__(key)
 
     def __init__(self, *args):
-        super().__init__(self)
+        super().__init__()
         for arg in args:
-            self[arg]
+            self[arg, assign]
 
-class EdgeSet(dict):
+    def __str__(self):
+        return str(list(self.keys()))
 
-    nodes: dict[Node]
+#TODO: add nodeset
+@opunpack
+class EdgeSet(setdict):
 
-    def __init__(self, edges=[]):
-        self.nodes = set()
-        for edge in edges:
-            self[edge] = True if not isinstance(edge, Edge) else edge.w
+    nodes: setdict
 
-    def __getitem__(self, edge):
-        edge = edge if isinstance(edge, Edge) else Edge(*edge)
-        return super().__getitem__(edge)
+    def __init__(self, *args, edges=[]):
+        self.nodes = setdict()
+        super().__init__(*args, *edges)
+        for edge in self:
+            self.nodes[edge.s, assign]
+            self.nodes[edge.t, assign]
 
-    def __setitem__(self, edge, w, d=False):
-        if isinstance(edge, Edge):
-            edge.w = w
-            edge.d = d
+    def __getitem__(self, key, op=None):
+        if op is assign:
+            if isinstance(key, Node):
+                newnode = self.nodes[key, assign]
+                for edge in self:
+                    if edge.s == newnode:
+                        edge.s = newnode
+                    if edge.t == newnode:
+                        edge.t = newnode
+                return newnode
+            else:
+                edge = key if isinstance(key, Edge) else Edge(*key)
+                if edge.s in self.nodes:
+                    edge.s = self.nodes[edge.s]
+                else:
+                    self.nodes[edge.s, assign]
+                if edge.t in self.nodes:
+                    edge.t = self.nodes[edge.t]
+                else:
+                    self.nodes[edge.t, assign]
+                return super().__getitem__(edge, op=op)
         else:
-            edge = Edge(*edge, w=w, d=d)
-        super().__setitem__(edge, edge)
-        self.nodes.add(edge.s)
-        self.nodes.add(edge.t)
+            if isinstance(key, Node):
+                for edge in self:
+                    if key in edge:
+                        return edge
+                raise KeyError
+            else:
+                return super().__getitem__(key, op=op)
 
     # TODO: see if you can use the fact that connected edges are kept track of in nodes to make this more efficient
     def __delitem__(self, edge):
-        super().__delitem__(Edge(*edge))
-        for node in edge:
+        super().__delitem__(edge)
+        for node in (edge.s, edge.t):
             if sum([node in edge for edge in self]) == 0:
-                self.nodes.pop(node)
+                del self.nodes[node]
 
     def __contains__(self, x):
-        if isinstance(x, Node):
-            for edge in self:
-                if x in self:
-                    return True
-            return False
-        else:
-            return super().__contains__(x)
+        if isinstance(x, EdgeSet):
+            return sum(item not in self for item in x) == 0 and sum(node not in self for node in x.nodes) == 0
+        return x in self.nodes or super().__contains__(x)
     
     def __repr__(self):
         return list(self.keys()).__repr__()
     
     def __str__(self):
         return list(self.keys()).__str__()
+    
+    def __hash__(self):
+        edges = [hash(edge) for edge in self]
+        edges.sort()
+        return hash(tuple(edges))
+
+    def __eq__(self, other):
+        if isinstance(other, EdgeSet):
+            return other in self and self in other
+        else:
+            raise ValueError(f"Attempted to test if object of type {type(other)} is equal to an EdgeSet.")
+
+    def __iadd__(self, other):
+        if isinstance(other, EdgeSet):
+            for edge in other:
+                self[edge, assign]
+            return self
+        elif isinstance(other, Edge):
+            self[other, assign]
+            return self
+        else:
+            raise ValueError(f"Attempted to add object of type {type(other)} to an EdgeSet.")
+
+    def __add__(self, other):
+        graph = self.copy()
+        graph += other
+        return graph
+        
+    def __sub__(self, other):
+        if isinstance(other, EdgeSet):
+            return EdgeSet(*[edge for edge in self if edge not in other])
+            graph = self.copy()
+            for edge in self:
+                if edge in other:
+                    del graph[edge]
+            return graph
+        else:
+            raise ValueError(f"Attempted to add object of type {type(other)} to an EdgeSet.")
+        
+    def intersect(self, other):
+        union = self + other
+        return EdgeSet(*[edge for edge in union if edge in self and edge in other])
+    
+    def symmetric_difference(self, other):
+        union = self + other
+        return EdgeSet(*[edge for edge in union if not (edge in self and edge in other)])        
 
     def copy(self):
-        return self.__class__(edges=copy.deepcopy(list(self)))
+        newself = copy.deepcopy(self)
+        newself.nodes = copy.deepcopy(self.nodes)
+        return newself
 
+    # Returns a cycle such that the direction of each edge faces inwards
+    def get_cycle(self):
+        graph = self.copy()
+        t = list(graph.nodes)[0]
+        cycle = []
+        while t in graph:
+            edge = graph[t]
+            if t != edge.s and not edge.d:
+                cycle.append(edge.switch())
+            elif t == edge.s:
+                cycle.append(edge)
+            t = cycle[-1].other(t)
+            del graph[edge]
+        if cycle[-1].t == cycle[0].s:
+            insides, outsides = 0, 0
+            for i in range(len(cycle)-1):
+                if fmod(cycle[i+1].axis() - cycle[i].axis(), 360) < 180:
+                    insides += 1
+                if fmod(cycle[i+1].axis() - cycle[i].axis(), 360) > 180:
+                    outsides += 1
+            if outsides > insides:
+                for i in range(len(cycle)):
+                    cycle[i] = cycle[i].switch()
+            return cycle
+        return None
+                    
+    # Uses raycasting to determine if a point lies inside a polygon.
+    # Assumes self is the polygon. 
+    def test_interior(self, point):
+        # cycle = self.get_cycle()
+        # if len(cycle) == 0:
+        #     raise ValueError("Attempted to test the interior of a non-cyclical set of edges.")
+        # Sees if a point lies in the range of the edge along some axis.
+        def in_range(edge, axis=0):
+            return (edge.s[axis] <= point[axis] and point[axis] <= edge.t[axis]) or (edge.t[axis] <= point[axis] and point[axis] <= edge.s[axis])
+        edges = [edge for edge in self if in_range(edge)]
+        above = [edge for edge in edges if edge.s[1] >= point[1] and edge.t[1] >= point[1]]
+        return (len(above) % 2) != 0
+    
+
+@opunpack
 class Graph(EdgeSet):
 
-    def __setitem__(self, edge, weight):
+    def __getitem__(self, edge, op=None):
         if self.is_admissible_edge(edge):
-            super().__setitem__(edge, weight)
+            return super().__getitem__(edge, op=op)
         else:
             raise KeyError(f"Attempted to set an inadmissible edge {edge} to the graph.")
     
@@ -219,156 +432,79 @@ class Graph(EdgeSet):
 
 
     def make_bipartite(self):
-        src = list(self.nodes)[0]
+        src = self.nodes[list(self.nodes.keys())[0]]
         src.color = 0
-        L, R = [], []
-        D = set([src])
-        Q = [src]
+        D = set()
+        D.add(src)
+        Q = []
+        Q.append(src)
         while len(Q) > 0:
             x = Q.pop()
+            D.add(x)
             for neighbor in self.neighbors(x):
                 neighbor.color = not x.color
+                self.nodes[neighbor].color = not x.color
                 if neighbor not in D:
-                    Q.append(neighbor)
-                    D.add(neighbor)
-            D.add(x)
-        for node in D:
-            if node.color == 0:
-                L.append(node)
+                    Q.append(self.nodes[neighbor])
+                    D.add(self.nodes[neighbor])
+        for edge in self:
+            if not self.nodes[edge.s].color:
+                self[edge].switch()
+
+    @property
+    def two_factor(self):
+        if not hasattr(self, '_two_factor'):
+            model = Model(name='two_factor')
+            xs = {}
+            xvs = {node: [] for node in self.nodes}
+            for edge in self:
+                id = str((edge.s, edge.t))
+                u, v = edge.s, edge.t
+                xs[edge] = model.integer_var(name=id)
+                xvs[u].append(xs[edge])
+                xvs[v].append(xs[edge])
+            for uv in xs:
+                model.add_constraint(xs[uv] >= 0)
+                model.add_constraint(xs[uv] <= 1)
+            for u in xvs:
+                uvs = xvs[u]
+                model.add_constraint(sum(uvs) == 2)
+            model.maximize(sum(xs.values()))
+            model.solve()
+            if model.solution is not None:
+                self._two_factor = EdgeSet(*[edge for edge in self if model.solution[str(edge)] == 1.0])
             else:
-                R.append(node)
-        return L, R, D
+                self._two_factor = EdgeSet()
+        return self._two_factor
 
-    def hungarian_method(self):
-
-        # Creates an initial matching and alternating tree
-        M = []
-        S = []
-        T = []
-
-        # Gets the partitions of the graph
-        X, Y, D = self.make_bipartite(list(self.nodes)[0])
-        if set(X + Y) != D or len(X) != len(Y):
-            return None
-
-        # Turns the graph into a complete bipartite graph
-        complete_graph = Graph(edges=list(self))
-        for l in X:
-            for r in Y:
-                if (l, r) not in complete_graph:
-                    complete_graph[l, r] = 0
-
-        # Creates an initial labeling
-        labeling = {
-            **{y: 0 for y in Y},
-            **{x: max(edge.w for edge in complete_graph if x in edge) for x in X}
-        }
-
-        def compute_equality_graph():
-            return Graph(edges=[edge for edge in complete_graph if labeling[edge.s] + labeling[edge.t] == edge.w])
-    
-        equality_graph = compute_equality_graph()
-
-        def is_perfect_matching():
-            for node in self.nodes:
-                is_included = [node in edge for edge in M]
-                if sum(is_included) != 1:
-                    return False
-            return True
-
-        def is_free(y):
-            for edge in M:
-                if y in edge:
-                    return False
-            return True
-
-        def neighbors():
-            return set(sum([equality_graph.neighbors(node) for node in S], start=[]))
-
-        def neighbors_without_T():
-            return [node for node in neighbors() if node not in T]
-
-        def improve_labeling():
-            a = max(labeling.values())
-            for s in S:
-                for y in neighbors_without_T():
-                    a = min(a, labeling[s] + labeling[y] - self[s, y].w)
-            for v in S:
-                labeling[v] = labeling[v] - a
-            for v in T:
-                labeling[v] = labeling[v] + a
-
-        def matching_node(y):
-            for edge in M:
-                if y in edge:
-                    return edge.other(y)
-            return None
-
-        def free_vertex():
-            free_vertices = [x for x in X if is_free(x)]
-            if len(free_vertices) == 0:
-                return None
-            else:
-                return free_vertices[0]
-
-        def augment_M(y):
-
-            def longest_alternating_path(path, S, T):
-                neighbors = [node for node in equality_graph.neighbors(path[-1]) if node not in path and node in S]
-                for x in neighbors:
-                    next_path = longest_alternating_path(path + [x], T, S)
-                    if len(next_path) == len(S) + len(T) + 1:
-                        return next_path
-                return path
-
-            path = longest_alternating_path([y], S, T)
-        
-            for edge in M[:]:
-                s, t = edge
-                if s in path or t in path:
-                    M.remove(edge)
-
-            for i in range(0, len(path), 2):
-                edge = Edge(path[i], path[i+1])
-                M.append(edge)
-
-        S.append(free_vertex())
-        while not is_perfect_matching():
-            len_EG, len_M, len_S = len(equality_graph), len(M), len(S), 
-            N = neighbors_without_T()
-            if len(N) == 0:
-                improve_labeling()
-                equality_graph.clear()
-                equality_graph.update(compute_equality_graph())
-            else:
-                y = N[0]
-                if is_free(y):
-                    augment_M(y)
-                    S.clear()
-                    T.clear()
-                    S.append(free_vertex())
-                else:
-                    z = matching_node(y)
-                    S.append(z)
-                    T.append(y)
-            if len(equality_graph) == len_EG and len(M) == len_M and len(S) == len_S:
-                return None
-        return M
+    @two_factor.setter
+    def two_factor(self, value):
+        self._two_factor = value
 
     def dijkstra(self, src):
-        nodes = list(self.nodes)
-        D = {x: 0 if x == src else float('inf') for x in nodes}
+        unweighted_weight = lambda edge: 1 if not hasattr(edge, 'weight') else edge.weight
+        D = {x: 0 if x == src else float('inf') for x in self.nodes}
         P = {src: src}
-        Q = set(nodes)
+        Q = set(self.nodes)
         while len(Q) > 0:
             x = min(Q, key=lambda node: D[node])
             Q.remove(x)
-            for y in filter(lambda y: y in Q, self.neighbors(x, self)):
-                alt = D[x] + self[x, y]
-                if alt < D[y]:
-                    D[y] = alt
-                    P[y] = x
-        return D, P
+            for y in Q:
+                if y in self.neighbors(x) and Edge(x, y) in self:
+                    alt = D[x] + unweighted_weight(self[Edge(x, y)])
+                    if alt < D[y]:
+                        D[y] = alt
+                        P[y] = x
+        def path(x):
+            p = [x]
+            while p[-1] != src and p[-1] in P:
+                p.append(P[p[-1]])
+            if x in P:
+                return p + [src]
+            else: 
+                return []
+        D['path'] = path
+        return D
         
     def shortest_path(self, src, dest):
         _, p = self.dijkstra(src)
@@ -426,21 +562,96 @@ class Graph(EdgeSet):
                 travelling_salesman_tours.append(Graph.vertex_sequence_to_edges(tour))
             if len(travelling_salesman_tours[0]) < len(tour):
                 return travelling_salesman_tours
+            
+    def tst(self):
+        self.make_bipartite()
+        model = Model(name='tst')
+        xvs = {
+            'incoming': {node: [] for node in self.nodes},
+            'outgoing': {node: [] for node in self.nodes}
+        }
+
+        for edge in self:
+            for e in [edge, edge.switch()]:
+                var = model.integer_var(name=str((e.s, e.t)))
+                xvs['outgoing'][e.s].append(var)
+                xvs['incoming'][e.t].append(var)
+
+        for node in self.nodes:
+            model.add_constraint((sum(xvs['incoming'][node]) - sum(xvs['outgoing'][node])) == 0)
+            model.add_constraint((sum(xvs['incoming'][node]) + sum(xvs['outgoing'][node])) >= 1)
+
+        model.minimize(sum(sum(xvs['outgoing'][node]) + sum(xvs['incoming'][node]) for node in self.nodes))
+        model.solve()
+
+        if model.solution is not None:
+            return [*[Edge(edge.s, edge.t, d=True) for edge in self if model.solution[str(edge)] == 1.0], *[Edge(edge.t, edge.s, d=True) for edge in self if model.solution[str(edge.switch())] == 1.0]]
+        return []
 
 class SolidGridGraph(Graph):
 
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]    
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
     def is_admissible_edge(self, edge):
         edge = Edge(*edge)
-        s, t = edge
         for d in SolidGridGraph.directions:
-            if s + d == t:
+            if edge.s + d == edge.t:
                 return True
         return False
 
     def neighbors(self, node: Node):
         return [node + direction for direction in SolidGridGraph.directions if node + direction in self.nodes]
+
+    def make_solid(self):
+        for node in self.nodes:
+            for neighbor in self.neighbors(node):
+                self[Edge(node, neighbor), assign]
+        return self
+
+    def face_at_midpoint(self, point):
+        points = (point[0]-0.5,point[1]-0.5), (point[0]-0.5,point[1]+0.5), (point[0]+0.5,point[1]-0.5), (point[0]+0.5, point[1]+0.5)
+        edges = [(points[i], points[(i+1)%4]) for i in range(len(points))]
+        return [self[edge] for edge in edges if edge in self]
+
+    def midpoint_at_face(self, face):
+        nodes = set([edge.s for edge in face]+[edge.t for edge in face])
+        if len(nodes) != 4:
+            raise ValueError(f"Attempted to get midpoint at incomplete face {face}.")
+        return sum(nodes, start=Node(0, 0)) * 0.25
+
+    @property
+    def faces(self):
+        if not hasattr(self, '_faces'):
+            faces = set()
+            def r_box(edge):
+                return EdgeSet(edge, edge.take_right(), edge.take_right().take_right(), edge.take_right().take_right().take_right())
+            def l_box(edge):
+                return EdgeSet(edge, edge.take_left(), edge.take_left().take_left(), edge.take_left().take_left().take_left())
+            for edge in self:
+                for e in [edge, edge.switch()]:
+                    r, l = r_box(e), l_box(e)
+                    faces.add(r)
+                    faces.add(l)
+            self._faces = faces
+        return self._faces
+    
+    @faces.setter
+    def faces(self, value):
+        self._faces = value
+
+    @property
+    def interior_faces(self):
+        if not hasattr(self, '_interior_faces'):
+            faces = set()
+            for face in self.faces:
+                if face in self:
+                    faces.add(face)
+            self._interior_faces = faces
+        return self._interior_faces
+    
+    @interior_faces.setter
+    def interior_faces(self, value):
+        self._interior_faces = value
 
     # if the number of unique four-cycles is less than four, 
     # there should not be a cycle using edges from the missing four-cycles
@@ -456,31 +667,217 @@ class SolidGridGraph(Graph):
                             if len(set(four_cycle) & set(cycle_edges)) == 0:
                                 return False
         return True
+    
+    def boundary_cycle(self):
+        boundary_edges = []
+        for edge in self:
+            if edge.parallel_left() not in self or edge.parallel_right() not in self:
+                boundary_edges.append(edge)
+        return EdgeSet(*boundary_edges).get_cycle()
+    
+    
+    def get_alternating_strip(self, edge):
+        sequence = [edge]
+        start = Edge(edge.midpoint(), edge.parallel_right().midpoint()).midpoint()
+        def isin(box):
+            return sum(e in self for e in box) == len(box)
+        def n_box(edge):
+            return edge.take_right().go_forward(), edge.switch().take_left().go_forward().switch(), edge.parallel_right().parallel_right()
+        while edge.parallel_right().parallel_right() in self and isin(n_box(edge)):
+            for e in n_box(edge):
+                sequence.append(e)
+            edge = edge.parallel_right().parallel_right()
+        if edge.parallel_right() in self:
+            sequence.append(edge.parallel_right())
+            strip = EdgeSet(*sequence)
+            setattr(strip, 'odd', True)
+        else:
+            sequence = sequence[:-1]
+            strip = EdgeSet(*sequence)
+            setattr(strip, 'even_edges', sequence[-2:])
+            setattr(strip, 'odd', False)
+        if len(strip) > 0:
+            setattr(strip, 'start', start)
+            setattr(strip, 'end', Edge(sequence[-1].midpoint(), sequence[-2].midpoint()).midpoint())
+            setattr(strip, 'edge', sequence[0])
+        return strip
 
-    def make_face(node: Node, dx: int, dy: int):
+    def get_perimeter_of_alternating_strip(strip):
+        graph = strip.copy()
+        nodes = []
+        for node in strip.nodes:
+            if sum([node in edge for edge in strip]) > 1:
+                nodes.append(node)
+        for n1 in nodes:
+            for n2 in nodes:
+                if (n1, n2) in strip:
+                    del graph[Edge(n1, n2)]
+        return graph
+    
+    def flip_perimeter_of_alternating_strip(perimeter):
+        flipped = EdgeSet()
+        ff = lambda edge: edge.go_forward().go_forward()
+        fr = lambda edge: edge.go_forward().take_right()
+        rf = lambda edge: edge.take_right().go_forward()
+        rr = lambda edge: edge.take_right().take_right()
+        edge = next(iter(perimeter))
+        i = edge
+        # exit()
+        for _ in perimeter:
+            if ff(i) in perimeter:
+                i = ff(i)
+            elif fr(i) in perimeter:
+                i = fr(i)
+            elif rf(i) in perimeter:
+                i = rf(i)
+            elif rr(i) in perimeter:
+                i = rr(i)
+            else:
+                edge = edge.switch()
+                break
+        for _ in perimeter:
+            if ff(edge) in perimeter:
+                flipped[edge.go_forward(), assign]
+                edge = ff(edge)
+            elif fr(edge) in perimeter:
+                flipped[edge.go_forward(), assign]
+                edge = fr(edge)
+            elif rf(edge) in perimeter:
+                flipped[edge.take_right(), assign]
+                edge = rf(edge)
+            elif rr(edge) in perimeter:
+                flipped[edge.take_right(), assign]
+                edge = rr(edge)
+        return flipped
+
+    def get_alternating_strips(self):
+        two_factor = self.two_factor
+        alternating_strips = []
+        alternating_strip_edges = EdgeSet()
+        for edge in self:
+            for edge in [edge, edge.switch()]:
+                x1, y1 = edge.midpoint()
+                x2, y2 = edge.parallel_right().midpoint()
+                if not two_factor.test_interior(((x1+x2)/2, (y1+y2)/2)):
+                    strip = SolidGridGraph.get_alternating_strip(two_factor, edge)
+                    if len(strip) > 1 and strip not in alternating_strips:
+                        alternating_strips.append(strip)
+                        alternating_strip_edges += strip
+        for strip in alternating_strips:
+            setattr(strip, 'chain', strip.edge.take_right() in alternating_strip_edges or strip.edge.switch().take_left() in alternating_strip_edges)
+        return alternating_strips
+    
+    def edge_flip(self, strip):
+        graph = self.copy()
+        perimeter = SolidGridGraph.get_perimeter_of_alternating_strip(strip)
+        graph.two_factor = (self.two_factor - perimeter) + SolidGridGraph.flip_perimeter_of_alternating_strip(perimeter)
+        return graph
+
+    def get_dual(self):
+        dual = SolidGridGraph()
+        for face in self.faces:
+            node = Node(*self.midpoint_at_face(face))
+            setattr(node, 'interior', face in self.interior_faces)
+            dual.nodes[node, assign]
+        dual = dual.make_solid()
+        dual.is_admissible_edge = lambda *args: True
+        exterior_nodes = set([x for x in dual.nodes if not x.interior])
+        for a in exterior_nodes:
+            for b in exterior_nodes:
+                edge = Edge(a, b)
+                setattr(edge, 'weight', 0)
+                dual[edge, assign]
+        return dual
+    
+    def static_alternating_strip(self):
+        alternating_strips = SolidGridGraph.get_alternating_strips(self)
+        dual = SolidGridGraph.get_dual(self)
+        all_pairs_shortest_path = {
+            node: dual.dijkstra(node) for node in dual.nodes
+        }
+        H = Graph()
+        for strip in alternating_strips:
+            start = Node(*strip.start)
+            end = Node(*strip.end)
+            H.nodes[start, assign]
+            H.nodes[end, assign]
+        for strip in alternating_strips:
+            start = H.nodes[Node(*strip.start)]
+            end = H.nodes[Node(*strip.end)]
+            setattr(start, 'chain', strip.chain)
+            setattr(end, 'odd', strip.odd)
+            edge = Edge(start, end, d=True)
+            setattr(edge, 'weight', len(strip) // 2)
+            H[edge, assign]
+        for strip in alternating_strips:
+            if not strip.odd:
+                even_edges = strip.even_edges
+                c = Edge(even_edges[0].midpoint(), even_edges[1].midpoint()).midpoint()
+                c1 = Edge(c, even_edges[0].midpoint()).go_forward().t
+                c2 = Edge(c, even_edges[1].midpoint()).go_forward().t
+                setattr(strip, 'c', c)
+                setattr(strip, 'c1', c1)
+                setattr(strip, 'c2', c2)
+                for other in alternating_strips:
+                    if not other.chain:
+                        if other.start in all_pairs_shortest_path[c1]['path'](c2):
+                            edge = Edge(c, other.start, d=True)
+                            setattr(edge, 'weight', 0)
+                            H[edge, assign]
+                    else:
+                        if len(all_pairs_shortest_path[c1]['path'](c2)) > 0 and other.start in (c1, c2):
+                            edge = Edge(c, other.start, d=True)
+                            setattr(edge, 'weight', 0)
+                            H[edge, assign]
+        all_pairs_shortest_path = {
+            node: H.dijkstra(node) for node in H.nodes
+        }
+        begins = [node for node in H.nodes if hasattr(node, 'chain') and not node.chain]
+        odds = [node for node in H.nodes if hasattr(node, 'odd') and node.odd]
+        paths = sum([[all_pairs_shortest_path[begin]['path'](odd) for begin in begins] for odd in odds], [])
+        paths = [path for path in paths if len(path) > 0]
+        static_strip = EdgeSet()
+        if len(paths) > 0:
+            path = min(paths, key=len)
+            for i in range(len(path)-1):
+                for strip in alternating_strips:
+                    if strip.start == path[i] and strip.end == path[i+1] and not self.two_factor.test_interior(strip.start):
+                        static_strip += strip
+        return static_strip
+        
+    def reduce_two_factor(self):
+        static_strip = self.static_alternating_strip()
+        if len(static_strip) == 0:
+            return None
+        else:
+            return self.edge_flip(static_strip)
+
+    def make_face(node, d):
+        dx, dy = d
         a = node + (dx, 0)
         b = node + (dx, dy)
         c = node + (0, dy)
         return [
-            (node, a),
-            (node, c),
-            (a, b),
-            (c, b)
+            Edge(node, a),
+            Edge(node, c),
+            Edge(a, b),
+            Edge(c, b)
         ]
 
-    def add_random_face(graph: Graph, m: int, n: int):
-        num_edges_before: int = len(graph)
-        nodes: list[Node] = [Node(0, 0)] if len(graph) == 0 else list(graph.nodes)
+    def add_random_face(graph, m, n):
+        graph.nodes[Node(0, 0), assign]
+        num_edges_before = len(graph)
+        nodes = list(graph.nodes)
         random.shuffle(nodes)
         while len(graph) == num_edges_before:
-            node: Node = nodes.pop()
+            node = nodes.pop()
             directions = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
             random.shuffle(directions)
             while len(directions) > 0:
-                dx, dy = directions.pop()
-                if (0, 0) <= node + (dx, dy) <= (m, n):
-                    for edge in SolidGridGraph.make_face(node, dx, dy):
-                        graph[edge] = 1
+                d = directions.pop()
+                if (0, 0) <= node + d and node + d <= (m, n):
+                    for edge in SolidGridGraph.make_face(node, d):
+                        graph[edge, assign]
 
     def init_plt(self):
         import matplotlib.pyplot as plt
@@ -523,6 +920,8 @@ class SolidGridGraph(Graph):
         self.init_display()
         self.show()
 
+# sgg = SolidGridGraph(((1, 0), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((2, 2), (2, 1)), ((1, 4), (1, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 6), (1, 5)), ((1, 5), (2, 5)), ((2, 6), (2, 5)), ((1, 7), (2, 7)), ((0, 0), (1, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 4), (0, 4)), ((0, 4), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (1, 6)), ((2, 6), (3, 6)), ((3, 6), (3, 5)), ((3, 5), (3, 4)), ((3, 4), (2, 4)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (0, 9)), ((0, 9), (1, 9)), ((1, 9), (2, 9)), ((2, 9), (3, 9)), ((3, 9), (3, 8)), ((3, 8), (2, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 6)), ((2, 6), (1, 6)), ((1, 6), (1, 7)), ((0, 5), (1, 5)), ((1, 5), (1, 4)), ((1, 4), (2, 4)), ((2, 5), (2, 4)), ((2, 5), (3, 5)), ((1, 8), (2, 8)), ((1, 9), (1, 8)), ((2, 9), (2, 8)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((2, 0), (2, 1)), ((2, 1), (3, 1)))
+# sgg.boundary_cycles()
 
 # goal: find longest cycle for some solid grid graph
 # subgoal: test hypothesis 
