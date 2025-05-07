@@ -6,7 +6,7 @@ class TikZStr(str):
     def str(self):
         return self
 
-class TiKZOptions(dict):
+class TikZOptions(dict):
 
     def draw(key, value, tikz):
         tikz.draw[key] = value
@@ -17,29 +17,29 @@ class TiKZOptions(dict):
         return tikz
 
     def color(color, tikz):
-        return TiKZOptions.style('color', color, tikz)
+        return TikZOptions.style('color', color, tikz)
     
     def intensity(n, tikz):
-        return TiKZOptions.color(f"{tikz.style['color']}!{n}", tikz)
+        return TikZOptions.color(f"{tikz.style['color']}!{n}", tikz)
 
     def str(self):
         return ', '.join([f"{key}={str(self[key])}" if self[key] is not None else str(key) for key in self.keys()])
 
-    COLOR = lambda color, tikz: TiKZOptions.color(color, tikz)
-    GRAY = lambda tikz: TiKZOptions.color('gray', tikz)
-    BLUE = lambda tikz: TiKZOptions.color('blue', tikz)
+    COLOR = lambda color, tikz: TikZOptions.color(color, tikz)
+    GRAY = lambda tikz: TikZOptions.color('gray', tikz)
+    BLUE = lambda tikz: TikZOptions.color('blue', tikz)
 
-    INTENSITY = lambda n, tikz: TiKZOptions.intensity(n, tikz)
-    LIGHT = lambda tikz: TiKZOptions.INTENSITY(30, tikz)
-    VERY_LIGHT = lambda tikz: TiKZOptions.INTENSITY(10, tikz)
+    INTENSITY = lambda n, tikz: TikZOptions.intensity(n, tikz)
+    LIGHT = lambda tikz: TikZOptions.INTENSITY(30, tikz)
+    VERY_LIGHT = lambda tikz: TikZOptions.INTENSITY(10, tikz)
 
 class TikZNode(Node):
 
-    draw = TiKZOptions({
+    draw = TikZOptions({
         # 'draw': None
     })
 
-    style = TiKZOptions({
+    style = TikZOptions({
         'circle': None,
         'draw': None,
         'black': None,
@@ -50,7 +50,7 @@ class TikZNode(Node):
 
     def __new__(cls, *args, edges=[], label='', style={}):
         node = super().__new__(cls, *args, edges=edges)
-        node.style = TiKZOptions({**TikZNode.style, **style})
+        node.style = TikZOptions({**TikZNode.style, **style})
         node.label = label
         return node
 
@@ -63,14 +63,14 @@ class TikZEdge(Edge):
 
     ARROW_ANGLE = 45
 
-    DIRECTED = lambda edge: TiKZOptions.style('shorten >', '3', TiKZOptions.style('->', None, TikZEdge(*edge)))
+    DIRECTED = lambda edge: TikZOptions.style('shorten >', '3', TikZOptions.style('->', None, TikZEdge(*edge)))
     
-    GRAY = lambda edge: TiKZOptions.color('gray', TikZEdge(*edge))
+    GRAY = lambda edge: TikZOptions.color('gray', TikZEdge(*edge))
 
-    SHORT = lambda edge: TiKZOptions.style('shorten <', '8', TikZEdge(*edge))
+    SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(*edge))
 
-    # DOTTED = lambda edge: TiKZOptions.style('dash pattern', f"on 10 off 10", TikZEdge(*edge))
-    DOTTED = lambda edge: TiKZOptions.style('dotted', None, TikZEdge(*edge))
+    # DOTTED = lambda edge: TikZOptions.style('dash pattern', f"on 10 off 10", TikZEdge(*edge))
+    DOTTED = lambda edge: TikZOptions.style('dotted', None, TikZEdge(*edge))
 
 
     # SHORT = lambda edge: TikZEdge(
@@ -89,11 +89,11 @@ class TikZEdge(Edge):
     #     }
     # )
 
-    draw = TiKZOptions({
+    draw = TikZOptions({
         'line width': '2pt'
     })
 
-    style = TiKZOptions({
+    style = TikZOptions({
         'color': 'black',
     })
 
@@ -103,8 +103,8 @@ class TikZEdge(Edge):
     # TODO: make Edge generic so this isn't necessary
     def __init__(self, s, t, d=False, draw={}, style={}):
         super().__init__(s if isinstance(s, TikZNode) else TikZNode(*s), t if isinstance(t, TikZNode) else TikZNode(*t), d=d)
-        self.style = TiKZOptions({**TikZEdge.style, **style})
-        self.draw = TiKZOptions({**TikZEdge.draw, **draw})
+        self.style = TikZOptions({**TikZEdge.style, **style})
+        self.draw = TikZOptions({**TikZEdge.draw, **draw})
 
     def str(self):
         return f"\draw[{self.draw.str()}] {str(self.s)} edge[{self.style.str()}] {str(self.t)};"
@@ -113,16 +113,13 @@ class TikZEdge(Edge):
 class TikZGraph(Graph):
     
     def make_bipartite(self):
-        for node in self.nodes:
-            self.nodes[TikZNode(*node), assign]
-        for edge in self:
-            self[TikZEdge(*edge), assign]
         super().make_bipartite()
         for edge in self:
             if edge.s.color == 1:
                 edge.s.style['fill'] = 'black'
             if edge.t.color == 1:
                 edge.t.style['fill'] = 'black'
+        return self
 
     def __init__(self, *edges):
         super().__init__()
@@ -135,6 +132,7 @@ class TikZGraph(Graph):
     def add_edges(self, *args):
         for edges in [[TikZEdge(*edge) for edge in edges] for edges in args]:
             self.edgesets.append(edges)
+        return self
 
     def add_background(self, *args):
         self.background += args
@@ -167,3 +165,4 @@ class TikZGraph(Graph):
         file = open(f'../draft/examples/{name}.tex', 'w')
         file.write(self.str())
         file.close()
+        print(f"wrote {name}")
