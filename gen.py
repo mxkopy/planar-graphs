@@ -7,20 +7,13 @@ import numpy as np
 from math import pi
 
 
-sgg = SolidGridGraph(
-((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)), ((2, 3), (2, 2)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((1, 2), (2, 2)), ((1, 3), (0, 3)), ((0, 3), (0, 2)), ((0, 2), (1, 2)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((3, 2), (4, 2)), ((4, 2), (4, 3)), ((3, 1), (4, 1)), ((4, 1), (4, 2))
-)
-# print(sgg.has_hc())
-
-
-def shade_faces(graph, faces, style='fill=black!10'):
+def shaded_faces(graph, faces, style='fill=black!10'):
     for face in faces:
-        x, y = sum((edge.s for edge in face), start=Node(0, 0)) * 0.25
-        graph.add_background(f"{chr(92)}fill[{style}] ({x-0.5}cm-1pt, {y-0.5}cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);")
+        x, y = graph.midpoint_at_face(face)
+        yield f"{chr(92)}fill[{style}] ({x-0.5}cm-1pt, {y-0.5}cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);"
 
 def shade_two_factor(graph, style='fill=black!10'):
-    faces = [face for face in SolidGridGraph(*[(edge.s, edge.t) for edge in graph]).faces if graph.two_factor.test_interior(sum((edge.s for edge in face), start=Node(0, 0)) * 0.25)]
-    shade_faces(graph, faces, style=style)
+    yield from shaded_faces(graph, (face for face in graph.faces if graph.two_factor.test_interior(graph.midpoint_at_face(face))), style=style)
 
 def visualize_hamiltonian_cycle(name, graph):
     i = 0
@@ -28,14 +21,14 @@ def visualize_hamiltonian_cycle(name, graph):
     tgraph.make_bipartite()
     tgraph.two_factor = graph.two_factor
     shade_two_factor(tgraph)
-    tfc = EdgeSet(*graph.two_factor.get_cycle()).nodes
+    tfc = EdgeSet(*graph.two_factor.as_cycle_facing_inwards()).nodes
     while set(tfc) != set(graph.nodes) and len(tfc) != 0:
         strip = graph.static_alternating_strip()
         tgraph.add_edges([TikZEdge(*edge) for edge in strip])
         tgraph.add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in tgraph if not tgraph.two_factor.test_interior(edge.midpoint()) and edge not in tgraph.two_factor])
         tgraph.write(f'{name}{i}')
         graph.edge_flip(strip)
-        tfc = EdgeSet(*graph.two_factor.get_cycle()).nodes
+        tfc = EdgeSet(*graph.two_factor.as_cycle_facing_inwards()).nodes
         tgraph = TikZGraph(*list(graph))
         tgraph.make_bipartite()
         tgraph.two_factor = graph.two_factor
@@ -45,6 +38,14 @@ def visualize_hamiltonian_cycle(name, graph):
 
 # visualize_hamiltonian_cycle('uot', sgg)
 
+strategy = SolidGridGraph.get_strategy()
+tikz_strategy = TikZGraph()
+for node in strategy.nodes:
+    tikz_strategy[TikZNode(*node), assign]
+tikz_strategy.make_bipartite()\
+    .add_edges(TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1])) for edge in strategy.keys())\
+    .write("strategy")
+
 i = 0
 # for graph in solid_grid_graph_iterator(4, 4, minimum=12):
 for graph in [
@@ -52,20 +53,19 @@ for graph in [
     SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((0, 3), (0, 2)), ((0, 3), (1, 3)), ((1, 3), (1, 2)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2))),
     SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))),
     SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0))),
-    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0)))
+    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))),
+    SolidGridGraph(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 1), (2, 2)), ((2, 2), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (0, 7)), ((0, 7), (1, 7)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (-1, 8)), ((-1, 8), (-2, 8)), ((-2, 8), (-2, 7)), ((-2, 7), (-1, 7)), ((-1, 7), (-1, 6)), ((-1, 6), (-1, 5)), ((-1, 5), (-2, 5)), ((-2, 5), (-3, 5)), ((-3, 5), (-3, 4)), ((-3, 4), (-2, 4)), ((-2, 4), (-2, 3)), ((-2, 3), (-1, 3)), ((-1, 3), (-1, 2)), ((-1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 1), (1, 1)), ((1, 1), (2, 1)), ((1, 1), (1, 0)), ((1, 1), (1, 2)), ((0, 2), (1, 2)), ((0, 3), (0, 2)), ((0, 3), (1, 3)), ((-1, 3), (0, 3)), ((0, 4), (0, 3)), ((0, 4), (1, 4)), ((1, 5), (1, 4)), ((0, 5), (0, 4)), ((-1, 5), (-1, 4)), ((-2, 4), (-1, 4)), ((-1, 4), (-1, 3)), ((-1, 4), (0, 4)), ((-2, 5), (-2, 4)), ((-1, 5), (0, 5)), ((-1, 6), (0, 6)), ((-1, 8), (-1, 7)), ((0, 8), (0, 7)), ((-1, 7), (0, 7)))
 ]:
     uot = graph.union_of_tours()
-    # tst = graph.travelling_salesman_tours()
-    TikZGraph(*list(graph)).make_bipartite().add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in uot]).add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph]).add_edges([TikZOptions.BLUE(TikZEdge(edge.s, edge.t)) for edge in graph.unfurl_uot(uot)]).write(f'uot{i}')
-    # TikZGraph(*list(graph)).make_bipartite().add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in tst[0]]).add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph]).write(f'tst{i}')
+    TikZGraph(*list(graph)).make_bipartite()\
+        .add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in uot])\
+        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph])\
+        .add_edges([TikZOptions.BLUE(TikZEdge(edge.s, edge.t)) for edge in graph.unfurl_uot(uot)])\
+        .write(f'uot{i}')
     i+=1
-    # if len(tst) > 0:
-        # if (len(tst[0]) - len(uot)) >= 6:
-            # TikZGraph(*list(graph)).make_bipartite().add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in uot]).add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph]).write(f'uot{i}')
-            # TikZGraph(*list(graph)).make_bipartite().add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in tst[0]]).add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph]).write(f'tst{i}')
-        # i += 1
+    del uot
 
-exit()
+# exit()
 
 cat_image = plt.imread('cat.png')
 
@@ -103,7 +103,7 @@ for edge in cat_graph:
 
 cat_graph.add_edges(list(cat_graph))
 cat_graph.write('cat')
-
+del cat_image, cat_graph
 
 example_graph_length = 2
 example_graph = TikZGraph(((0, 0), (example_graph_length, 0)), ((example_graph_length, 0), (example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5 )), ((example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5), (0, 0)))
@@ -116,6 +116,7 @@ example_graph.add_edges(
 )
 example_graph.add_edges([TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in example_graph])    
 example_graph.write('graph')
+del example_graph
 
 # first example of a trail
 trail_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
@@ -128,6 +129,7 @@ trail_graph.add_edges(
     ]
 )
 trail_graph.write('trail')
+del trail_graph
 
 # trail_graph = Graph(edges=[((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))])
 # trail_graph.make_bipartite = lambda: ([], trail_graph.nodes, trail_graph.nodes)
@@ -150,6 +152,7 @@ path_graph.add_edges(
 path_graph.nodes[(1, 0)].draw['draw'] = 'none'
 path_graph.nodes[(1, 0)].style['draw'] = 'none'
 path_graph.write('path')
+del path_graph
 
 # first example of a bipartite graph
 solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)))
@@ -160,6 +163,7 @@ solid_grid_graph.add_edges(
     ]
 )
 solid_grid_graph.write('solid')
+del solid_grid_graph
 
 grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)))
 grid_graph.make_bipartite()
@@ -169,7 +173,7 @@ grid_graph.add_edges(
     ]
 )
 grid_graph.write('grid')
-
+del grid_graph
 
 # first example of a Hamiltonian path & Hamiltonian cycle
 hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
@@ -188,6 +192,7 @@ hamiltonian_graph.edgesets[0] = [
     TikZEdge(*edge) for edge in hamiltonian_graph.hamiltonian_cycles()[0]
 ]
 hamiltonian_graph.write('hamiltonian_cycle')
+del hamiltonian_graph
 
 # first example of the TST
 travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0)))
@@ -211,6 +216,7 @@ one_factor_graph.add_edges(
     ]
 )
 one_factor_graph.write('one_factor')
+del one_factor_graph
 
 # no_one_factor.tex
 no_one_factor_graph = TikZGraph(*Graph.vertex_sequence_to_edges([(0, 1), (1.7293088488585, 2.0047342460869), (1.7347798055927, 0.0047417289428), (0, 1)]))
@@ -220,7 +226,7 @@ no_one_factor_graph.add_edges(
     ]
 )
 no_one_factor_graph.write('no_one_factor')
-
+del no_one_factor_graph
 
 # two_factor.tex
 two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)))
@@ -231,7 +237,7 @@ two_factor_graph.add_edges(
     ]
 )
 two_factor_graph.write('two_factor')
-
+del two_factor_graph
 
 # no_two_factor.tex
 no_two_factor_graph = TikZGraph(*list(travelling_salesman_tour_graph.keys()))
@@ -242,7 +248,7 @@ no_two_factor_graph.add_edges(
     ]
 )
 no_two_factor_graph.write('no_two_factor')
-
+del no_two_factor_graph, travelling_salesman_tour_graph
 
 import os
 import pickle
@@ -270,7 +276,9 @@ else:
 strips = big_two_factor_graph.get_alternating_strips()
 static = big_two_factor_graph.static_alternating_strip()
 
+shaded = shade_two_factor(big_two_factor_graph)
 big_two_factor_graph = TikZGraph(*list(big_two_factor_graph))
+big_two_factor_graph.add_background(*shaded)
 
 big_two_factor_graph.add_edges(
     [
@@ -282,10 +290,7 @@ for node in big_two_factor_graph.nodes:
     big_two_factor_graph.nodes[node].style["draw"] = 'none'
     big_two_factor_graph.nodes[node].style["fill"] = 'none'
 
-
-shade_two_factor(big_two_factor_graph)
 big_two_factor_graph.write('big_two_factor')
-
 del big_two_factor_graph
 
 
@@ -309,6 +314,7 @@ cubic_graph.add_edges(
 cubic_graph.add_edges(list(cubic_graph))
 
 cubic_graph.write('cubic_graph')
+del cubic_graph
 
 cubic_embedding = TikZGraph(((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 3), (0, 3)), ((0, 4), (0, 3)), ((1, 4), (2, 4)), ((2, 4), (2, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((2, 4), (3, 4)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)), ((0, 3), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((2, 1), (3, 1)), ((3, 2), (3, 1)), ((2, 2), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 3)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 2), (4, 3)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 0), (4, 0)), ((4, 0), (4, 1)))
 cubic_embedding.make_bipartite()
@@ -325,6 +331,7 @@ cubic_embedding.add_edges(
 )
 
 cubic_embedding.write('cubic_embedding')
+del cubic_embedding
 
 # type_3_before_flip.tex
 type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0)))
@@ -340,6 +347,7 @@ type_3_before_flip.add_edges(
 type_3_before_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(1.1, 1);", "\\fill[fill=black!10] (2, 0) rectangle ++(1.1, 1);")
 type_3_before_flip.add_background("\\draw node at (1.5, 0.5) {\\textbf{III}};")
 type_3_before_flip.write('type_3_before_flip')
+del type_3_before_flip
 
 type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0)))
 type_3_after_flip.make_bipartite()
@@ -353,6 +361,7 @@ type_3_after_flip.add_edges(
 )
 type_3_after_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(3.1, 1);")
 type_3_after_flip.write('type_3_after_flip')
+del type_3_after_flip
 
 short_odd_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (1, 0)))
 short_odd_alternating_strip.add_edges(list(short_odd_alternating_strip))
@@ -360,6 +369,7 @@ for node in short_odd_alternating_strip.nodes:
     short_odd_alternating_strip.nodes[node].style["fill"] = "black"
 short_odd_alternating_strip.add_background("\\useasboundingbox (0, 0) rectangle ++(7, 1);")
 short_odd_alternating_strip.write('short_odd_alternating_strip')
+del short_odd_alternating_strip
 
 longer_odd_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((2, 0), (1, 0)), ((3, 1), (3, 0)))
 longer_odd_alternating_strip.add_edges(list(longer_odd_alternating_strip))
@@ -367,6 +377,7 @@ for node in longer_odd_alternating_strip.nodes:
     longer_odd_alternating_strip.nodes[node].style["fill"] = "black"
 longer_odd_alternating_strip.add_background("\\useasboundingbox (0, 0) rectangle ++(7, 1);")
 longer_odd_alternating_strip.write('longer_odd_alternating_strip')
+del longer_odd_alternating_strip
 
 general_odd_alternating_strip = TikZGraph(((5, -7), (5, -8)), ((6, -7), (7, -7)), ((7, -7), (7, -8)), ((6, -8), (7, -8)), ((10, -7), (11, -7)), ((11, -7), (11, -8)), ((10, -8), (11, -8)), ((12, -7), (12, -8)))
 general_odd_alternating_strip.add_edges(list(general_odd_alternating_strip))
@@ -375,7 +386,7 @@ for node in general_odd_alternating_strip.nodes:
     general_odd_alternating_strip.nodes[node].style["fill"] = "black"
 general_odd_alternating_strip.add_background("\\useasboundingbox (5, -8) rectangle ++(7, 1);")
 general_odd_alternating_strip.write('general_odd_alternating_strip')
-
+del general_odd_alternating_strip
 
 short_even_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0)))
 short_even_alternating_strip.add_edges(list(short_even_alternating_strip))
@@ -383,6 +394,7 @@ for node in short_even_alternating_strip.nodes:
     short_even_alternating_strip.nodes[node].style["fill"] = "black"
 short_even_alternating_strip.add_background("\\useasboundingbox (0, 0) rectangle ++(8, 1);")
 short_even_alternating_strip.write('short_even_alternating_strip')
+del short_even_alternating_strip
 
 longer_even_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((3, 1), (4, 1)), ((3, 0), (4, 0)))
 longer_even_alternating_strip.add_edges(list(longer_even_alternating_strip))
@@ -390,6 +402,7 @@ for node in longer_even_alternating_strip.nodes:
     longer_even_alternating_strip.nodes[node].style["fill"] = "black"
 longer_even_alternating_strip.add_background("\\useasboundingbox (0, 0) rectangle ++(8, 1);")
 longer_even_alternating_strip.write('longer_even_alternating_strip')
+del longer_even_alternating_strip
 
 general_even_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((5, 1), (6, 1)), ((6, 1), (6, 0)), ((6, 0), (5, 0)), ((7, 1), (8, 1)), ((7, 0), (8, 0)))
 general_even_alternating_strip.add_edges(list(general_even_alternating_strip))
@@ -398,25 +411,19 @@ for node in general_even_alternating_strip.nodes:
     general_even_alternating_strip.nodes[node].style["fill"] = "black"
 general_even_alternating_strip.add_background("\\useasboundingbox (0, 0) rectangle ++(8, 1);")
 general_even_alternating_strip.write('general_even_alternating_strip')
+del general_even_alternating_strip
 
-alternating_strip_before_flip = TikZGraph(((1, 0), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((2, 2), (2, 1)), ((1, 4), (1, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 6), (1, 5)), ((1, 5), (2, 5)), ((2, 6), (2, 5)), ((1, 7), (2, 7)), ((0, 0), (1, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 4), (0, 4)), ((0, 4), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (1, 6)), ((2, 6), (3, 6)), ((3, 6), (3, 5)), ((3, 5), (3, 4)), ((3, 4), (2, 4)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (0, 9)), ((0, 9), (1, 9)), ((1, 9), (2, 9)), ((2, 9), (3, 9)), ((3, 9), (3, 8)), ((3, 8), (2, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 6)), ((2, 6), (1, 6)), ((1, 6), (1, 7)), ((0, 5), (1, 5)), ((1, 5), (1, 4)), ((1, 4), (2, 4)), ((2, 5), (2, 4)), ((2, 5), (3, 5)), ((1, 8), (2, 8)), ((1, 9), (1, 8)), ((2, 9), (2, 8)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((2, 0), (2, 1)), ((2, 1), (3, 1)))
+alternating_strip_before_flip = SolidGridGraph(((1, 0), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((2, 2), (2, 1)), ((1, 4), (1, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 6), (1, 5)), ((1, 5), (2, 5)), ((2, 6), (2, 5)), ((1, 7), (2, 7)), ((0, 0), (1, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 4), (0, 4)), ((0, 4), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (1, 6)), ((2, 6), (3, 6)), ((3, 6), (3, 5)), ((3, 5), (3, 4)), ((3, 4), (2, 4)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (0, 9)), ((0, 9), (1, 9)), ((1, 9), (2, 9)), ((2, 9), (3, 9)), ((3, 9), (3, 8)), ((3, 8), (2, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 6)), ((2, 6), (1, 6)), ((1, 6), (1, 7)), ((0, 5), (1, 5)), ((1, 5), (1, 4)), ((1, 4), (2, 4)), ((2, 5), (2, 4)), ((2, 5), (3, 5)), ((1, 8), (2, 8)), ((1, 9), (1, 8)), ((2, 9), (2, 8)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((2, 0), (2, 1)), ((2, 1), (3, 1)))
+
+alternating_strip_before_flip.two_factor = EdgeSet(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7)))
+
+
+longest_strip = max(SolidGridGraph.get_alternating_strips(alternating_strip_before_flip), key=len)
+alternating_strip_after_flip = alternating_strip_before_flip.edge_flip(longest_strip)
+
+shaded = list(shade_two_factor(alternating_strip_before_flip))
+alternating_strip_before_flip = TikZGraph(*alternating_strip_before_flip)
 alternating_strip_before_flip.make_bipartite()
-
-alternating_strip_before_flip.two_factors = [EdgeSet(*two_factor) for two_factor in [
-    [((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0))],
-    [((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3))],
-    [((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7))]
-]]
-alternating_strip_before_flip.two_factor = EdgeSet()
-for two_factor in alternating_strip_before_flip.two_factors:
-    alternating_strip_before_flip.two_factor += two_factor
-alternating_strip_before_flip.alternating_strips = SolidGridGraph.get_alternating_strips(alternating_strip_before_flip)
-longest_strip = max(alternating_strip_before_flip.alternating_strips, key=len)
-
-perimeter = SolidGridGraph.get_perimeter_of_alternating_strip(longest_strip)
-
-alternating_strip_after_flip = SolidGridGraph.edge_flip(alternating_strip_before_flip, longest_strip)
-
 alternating_strip_before_flip.add_edges(
     [
         TikZEdge(*edge) for edge in longest_strip
@@ -429,11 +436,15 @@ for node in alternating_strip_before_flip.nodes:
     if node not in longest_strip:
         node.style["draw"] = "none"
         node.style["fill"] = "none"
-
-shade_two_factor(alternating_strip_before_flip)
+alternating_strip_before_flip.add_background(*shaded)
 alternating_strip_before_flip.write('alternating_strip_before_flip')
 
-longest_strip_flipped = SolidGridGraph.flip_perimeter_of_alternating_strip(perimeter) + longest_strip - perimeter
+longest_strip_flipped = longest_strip.flipped_perimeter + longest_strip - longest_strip.perimeter
+
+shaded = list(shade_two_factor(alternating_strip_after_flip))
+alternating_strip_after_flip = TikZGraph(*alternating_strip_after_flip)
+alternating_strip_after_flip.two_factor = alternating_strip_before_flip.two_factor - longest_strip.perimeter + longest_strip.flipped_perimeter
+alternating_strip_after_flip.make_bipartite()
 alternating_strip_after_flip.add_edges(
     [
         TikZEdge(*edge) for edge in longest_strip_flipped
@@ -448,9 +459,9 @@ for node in alternating_strip_after_flip.nodes:
         node.style["draw"] = "none"
         node.style["fill"] = "none"
 
-
-shade_two_factor(alternating_strip_after_flip)
+alternating_strip_after_flip.add_background(*shaded)
 alternating_strip_after_flip.write('alternating_strip_after_flip')
+del alternating_strip_after_flip, alternating_strip_before_flip
     
 # visualize_hamiltonian_cycle('tst', SolidGridGraph(*[Edge(edge.s, edge.t) for edge in big_two_factor_graph]))
 

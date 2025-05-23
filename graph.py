@@ -1,6 +1,7 @@
 import random, copy
 from typing import Union, TypeVar, Generic
 from math import atan2, degrees, fmod, sqrt, pow, sin, cos, radians
+from itertools import chain
 from docplex.mp.model import Model
 
 class Node(tuple):
@@ -257,6 +258,9 @@ class EdgeSet(setdict):
                 return super().__getitem__(edge, op=op)
         else:
             if isinstance(key, Node):
+                if key in self.nodes:
+                    return self.nodes[key]
+                raise KeyError
                 for edge in self:
                     if key in edge:
                         return edge
@@ -268,7 +272,7 @@ class EdgeSet(setdict):
     def __delitem__(self, edge):
         super().__delitem__(edge)
         for node in (edge.s, edge.t):
-            if sum([node in edge for edge in self]) == 0:
+            if sum(node in edge for edge in self) == 0:
                 del self.nodes[node]
 
     def __contains__(self, x):
@@ -297,6 +301,8 @@ class EdgeSet(setdict):
         if isinstance(other, EdgeSet):
             for edge in other:
                 self[edge, assign]
+            for node in other.nodes:
+                self[node, assign]
             return self
         elif isinstance(other, Edge):
             self[other, assign]
@@ -323,15 +329,17 @@ class EdgeSet(setdict):
         
     def __sub__(self, other):
         if isinstance(other, EdgeSet):
-            return EdgeSet(*[edge for edge in self if edge not in other])
+            return EdgeSet(*(edge for edge in self if edge not in other))
         else:
             raise ValueError(f"Attempted to add object of type {type(other)} to an EdgeSet.")
         
     def intersect(self, other):
+        return EdgeSet(*chain((edge for edge in self if edge in other), (edge for edge in other if edge in self)))
         return EdgeSet(*([edge for edge in self if edge in other]+[edge for edge in other if edge in self]))
     
     def symmetric_difference(self, other):
-        return EdgeSet(*([edge for edge in self if edge not in other]+[edge for edge in other if edge not in self]) )
+        return EdgeSet(*chain((edge for edge in self if edge not in other), (edge for edge in other if edge not in self)))
+        return EdgeSet(*([edge for edge in self if edge not in other]+[edge for edge in other if edge not in self]))
 
     def copy(self):
         newself = copy.deepcopy(self)
@@ -339,21 +347,40 @@ class EdgeSet(setdict):
         return newself
         return self.__class__(*list(self))
 
-    # Returns a cycle such that the direction of each edge faces inwards
-    def get_cycle(self):
-        graph = self.copy()
-        if len(graph.nodes) == 0:
+
+    # Naively assumes self is a simple cycle, and returns self reoriented as such (if possible)
+    def as_simple_cycle(self):
+        if len(self.nodes) == 0:
             return []
-        t = list(graph.nodes)[0]
+        t = list(self.nodes)[0]
+        D = set([t])
         cycle = []
-        while t in graph:
-            edge = graph[t]
+        while t in self:
+            edge = next(edge for edge in self if t in edge and (edge.other(t) not in D))
             if t != edge.s and not edge.d:
                 cycle.append(edge.switch())
             elif t == edge.s:
                 cycle.append(edge)
             t = cycle[-1].other(t)
-            del graph[edge]
+            D.add(t)
+        return cycle
+
+    # Returns a cycle such that the direction of each edge faces inwards
+    def as_cycle_facing_inwards(self):
+        # graph = self.copy()
+        # if len(graph.nodes) == 0:
+        #     return []
+        # t = list(graph.nodes)[0]
+        # discovered = set()
+        # cycle = []
+        # while t in graph:
+        #     edge = [edge for edge in graph if t in edge and (edge.t not in discovered or edge.s not in discovered)][0]
+        #     if t != edge.s and not edge.d:
+        #         cycle.append(edge.switch())
+        #     elif t == edge.s:
+        #         cycle.append(edge)
+        #     t = cycle[-1].other(t)
+        cycle = self.as_simple_cycle()
         if cycle[-1].t == cycle[0].s:
             insides, outsides = 0, 0
             for i in range(len(cycle)-1):
@@ -556,7 +583,11 @@ class Graph(EdgeSet):
             if len(travelling_salesman_tours[0]) < len(tour):
                 return travelling_salesman_tours
         return travelling_salesman_tours
-            
+    
+    # a TST has a net "flow" (i.e. #incoming - #outgoing edges per node) of 0, 
+    # and is covering (i.e. all nodes are reached by at least 1 edge)
+    # this function solves for these constraints via ILP, so every TST is a solution to this ILP (we call these solutions "union of tours")
+    # we hope to recover a TST from a UOT. 
     def union_of_tours(self):
         self.make_bipartite()
         model = Model(name='tst')
@@ -571,7 +602,7 @@ class Graph(EdgeSet):
                 xvs['incoming'][e.t].append(var)
         for node in self.nodes:
             model.add_constraint((sum(xvs['incoming'][node]) - sum(xvs['outgoing'][node])) == 0)
-            model.add_constraint((sum(xvs['incoming'][node]) + sum(xvs['outgoing'][node])) >= 1)
+            model.add_constraint((sum(xvs['incoming'][node]) + sum(xvs['outgoing'][node])) >= 2) # not clear if >= 2 vs >= 1 changes anything. it should be >= 2
         model.minimize(sum(sum(xvs['outgoing'][node]) + sum(xvs['incoming'][node]) for node in self.nodes))
         model.solve()
         if model.solution is not None:
@@ -592,7 +623,9 @@ class SolidGridGraph(Graph):
         return False
 
     def neighbors(self, node: Node):
-        return [self.nodes[node + direction] for direction in SolidGridGraph.directions if Edge(node, node + direction, d=False) in self]
+            # THIS IS FUCKING MADDENING
+            # print(hash((-2, 3)), hash((-1, 3)))
+        return [self.nodes[node + direction] for direction in SolidGridGraph.directions if Edge(node, node + direction, d=False) in self and node+direction in self.nodes]
 
     def make_solid(self):
         for node in self.nodes:
@@ -669,22 +702,27 @@ class SolidGridGraph(Graph):
         for edge in self:
             if edge.parallel_left() not in self or edge.parallel_right() not in self:
                 boundary_edges.append(edge)
-        return EdgeSet(*boundary_edges).get_cycle()
-    
+        return EdgeSet(*boundary_edges).as_cycle_facing_inwards()
     
     def get_alternating_strip(self, edge):
         sequence = [edge]
+        perimeter = [edge]
+        flipped_perimeter = []
         start = Edge(edge.midpoint(), edge.parallel_right().midpoint()).midpoint()
         def isin(box):
             return sum(e in self for e in box) == len(box)
         def n_box(edge):
             return edge.take_right().go_forward(), edge.switch().take_left().go_forward().switch(), edge.parallel_right().parallel_right()
         while edge.parallel_right().parallel_right() in self and isin(n_box(edge)):
-            for e in n_box(edge):
-                sequence.append(e)
+            upper, lower, right = n_box(edge)
+            perimeter += [upper, lower]
+            flipped_perimeter += [upper.switch().go_forward().switch(), lower.go_forward()]
+            sequence += [upper, lower, right]
             edge = edge.parallel_right().parallel_right()
         if edge.parallel_right() in self:
             sequence.append(edge.parallel_right())
+            perimeter += [edge.parallel_right()]
+            flipped_perimeter += [edge.take_right(), edge.switch().take_left().switch()]
             strip = EdgeSet(*sequence)
             setattr(strip, 'odd', True)
         else:
@@ -696,56 +734,9 @@ class SolidGridGraph(Graph):
             setattr(strip, 'start', start)
             setattr(strip, 'end', Edge(sequence[-1].midpoint(), sequence[-2].midpoint()).midpoint())
             setattr(strip, 'edge', sequence[0])
+            setattr(strip, 'perimeter', EdgeSet(*perimeter))
+            setattr(strip, 'flipped_perimeter', EdgeSet(*flipped_perimeter))
         return strip
-
-    def get_perimeter_of_alternating_strip(strip):
-        graph = strip.copy()
-        # graph = EdgeSet(*list(strip))
-        nodes = []
-        for node in strip.nodes:
-            if sum([node in edge for edge in strip]) > 1:
-                nodes.append(node)
-        for n1 in nodes:
-            for n2 in nodes:
-                if (n1, n2) in strip:
-                    del graph[Edge(n1, n2)]
-        return graph
-    
-    def flip_perimeter_of_alternating_strip(perimeter):
-        flipped = EdgeSet()
-        ff = lambda edge: edge.go_forward().go_forward()
-        fr = lambda edge: edge.go_forward().take_right()
-        rf = lambda edge: edge.take_right().go_forward()
-        rr = lambda edge: edge.take_right().take_right()
-        edge = next(iter(perimeter))
-        i = edge
-        # exit()
-        for _ in perimeter:
-            if ff(i) in perimeter:
-                i = ff(i)
-            elif fr(i) in perimeter:
-                i = fr(i)
-            elif rf(i) in perimeter:
-                i = rf(i)
-            elif rr(i) in perimeter:
-                i = rr(i)
-            else:
-                edge = edge.switch()
-                break
-        for _ in perimeter:
-            if ff(edge) in perimeter:
-                flipped[edge.go_forward(), assign]
-                edge = ff(edge)
-            elif fr(edge) in perimeter:
-                flipped[edge.go_forward(), assign]
-                edge = fr(edge)
-            elif rf(edge) in perimeter:
-                flipped[edge.take_right(), assign]
-                edge = rf(edge)
-            elif rr(edge) in perimeter:
-                flipped[edge.take_right(), assign]
-                edge = rr(edge)
-        return flipped
 
     def get_alternating_strips(self):
         # dual = SolidGridGraph.get_dual(self)
@@ -767,8 +758,11 @@ class SolidGridGraph(Graph):
     
     def edge_flip(self, strip):
         graph = self.copy()
-        perimeter = SolidGridGraph.get_perimeter_of_alternating_strip(strip)
-        graph.two_factor = (self.two_factor - perimeter) + SolidGridGraph.flip_perimeter_of_alternating_strip(perimeter)
+        # perimeter = SolidGridGraph.get_perimeter_of_alternating_strip(strip)
+        # graph.two_factor = (self.two_factor - perimeter) + SolidGridGraph.flip_perimeter_of_alternating_strip(perimeter)
+        # graph.two_factor = (self.two_factor - strip.perimeter) + strip.flipped_perimeter
+        graph.two_factor -= strip.perimeter
+        graph.two_factor += strip.flipped_perimeter
         return graph
 
     def get_dual(self):
@@ -856,54 +850,44 @@ class SolidGridGraph(Graph):
 
     def has_hc(self):
         next = self.reduce_two_factor()
-        if len(EdgeSet(*self.two_factor.get_cycle()).nodes) == len(self.nodes):
+        if len(EdgeSet(*self.two_factor.as_cycle_facing_inwards()).nodes) == len(self.nodes):
             return True
         if next is None:
             return False
         return SolidGridGraph.has_hc(next)
 
-    # get dual
-    # get maximum spanning tree of dual, weighing each edge by the difference between the number of edges on the vertex representing the outgoing face and the incoming face
+    # for every possible configuration of border and interior, find the TST-optimal interior
+    def get_strategy():
+        area = Graph()
+        for r in range(6):
+            for c in range(6):
+                area[Node(r, c), assign]
+        return area
 
+    # get dual
     def unfurl_uot(self, uot):
         uot = EdgeSet(*uot)
         dual = self.get_dual()
-        def uot_face_at_midpoint(graph, node):
-            l_edges = [Edge(edge.s, edge.t, d=True) for edge in SolidGridGraph.face_at_midpoint(graph, node)]
-            r_edges = [Edge(edge.t, edge.s, d=True) for edge in SolidGridGraph.face_at_midpoint(graph, node)]
-            return EdgeSet(*(l_edges + r_edges)).intersect(graph)
-        def uot_degree_at_midpoint(midpoint):
-            face = uot_face_at_midpoint(uot, midpoint)
-            return sum([sum([node in edge for edge in uot]) for node in face.nodes])
-        def max_degree(graph):
-            return max([sum(node in edge for edge in graph) for node in graph.nodes], default=0)
-        for node in dual.nodes:
-            if node.interior:
-                face = uot_face_at_midpoint(uot, node)
-                setattr(node, 'weight', uot_degree_at_midpoint(node) * (0 if max_degree(face) > 2 else 1))
         mst = EdgeSet()
-        dual_nodes = [node for node in dual.nodes if node.interior]
-        dual_nodes.sort(key=lambda node: node.weight)
-        mst.nodes[dual_nodes.pop(), assign]
-        # make sure that lines are always at least 1 from another line
-        while len(dual_nodes) > 0:
-            maxw = 0
-            edge = None
-            for node in mst.nodes:
-                for neighbor in dual.neighbors(node):
-                    if neighbor in dual_nodes and neighbor.weight > maxw:
-                    # if neighbor in dual_nodes and neighbor.weight > maxw and not (Edge(node, neighbor, d=True).parallel_left() in mst or Edge(node, neighbor, d=True).parallel_right() in mst):
-                        maxw = neighbor.weight
-                        edge = Edge(node, neighbor, d=True)
-            if edge is not None:
-                mst[edge, assign]
-                mst[edge.switch(), assign]
-                if edge.s in dual_nodes:
-                    dual_nodes.remove(edge.s)
-                if edge.t in dual_nodes:
-                    dual_nodes.remove(edge.t)
-            else:
-                mst.nodes[dual_nodes.pop(), assign]
+
+        def face_at(dual_node):
+            face = SolidGridGraph.face_at_midpoint(uot, dual_node)
+            edges = [edge for edge in face if edge in uot] + [edge.switch() for edge in face if edge.switch() in uot]
+            es = EdgeSet(*edges)
+            for node in face.nodes:
+                if node in uot.nodes:
+                    es[node, assign]
+            return es
+        
+        def midpoint_left(edge):
+            return Edge(edge.midpoint(), edge.parallel_left().midpoint(), d=True).midpoint()
+
+        def midpoint_right(edge):
+            return Edge(edge.midpoint(), edge.parallel_right().midpoint(), d=True).midpoint()
+
+        def midpoint_forward(edge):
+            return edge.go_forward().midpoint()
+
         return mst
 
     def make_face(node, d):
