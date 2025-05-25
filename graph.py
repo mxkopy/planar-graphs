@@ -6,32 +6,31 @@ from docplex.mp.model import Model
 
 class Node(tuple):
 
-    def __new__(cls, *value, edges=[]):
+    def __new__(cls, *value):
         while isinstance(value, tuple) and len(value) == 1:
             value = value[0]
         node = super(Node, cls).__new__(cls, value)
-        node.edges = edges
         return node
 
     def __add__(self, other):
         if isinstance(other, Node) or isinstance(other, tuple):
-            return Node(*(self[i]+o for i, o in enumerate(other)), edges=self.edges)
+            return Node(self[i]+o for i, o in enumerate(other))
         elif isinstance(other, Edge):
             return other+self
         else:
-            return Node(*(i+other for i in self), edges=self.edges)
+            return Node(i+other for i in self)
 
     def __sub__(self, other):
         if isinstance(other, Node) or isinstance(other, tuple):
-            return Node(*(self[i]-o for i, o in enumerate(other)), edges=self.edges)
+            return Node(self[i]-o for i, o in enumerate(other))
         else:
-            return Node(*(i-other for i in self), edges=self.edges)
+            return Node(i-other for i in self)
 
     def __mul__(self, other):
         if isinstance(other, Node) or isinstance(other, tuple):
-            return Node(*(self[i]*o for i, o in enumerate(other)))
+            return Node(self[i]*o for i, o in enumerate(other))
         else:
-            return Node(*(i*other for i in self))
+            return Node(i*other for i in self)
 
     def __gt__(self, other):
         for v, o in zip(self, other):
@@ -56,15 +55,12 @@ class Edge:
 
     s: Node
     t: Node
-    w: int
     d: bool
 
     def __init__(self, s, t, d=False):
         self.s = s if isinstance(s, Node) else Node(*s)
         self.t = t if isinstance(t, Node) else Node(*t)
         self.d = d
-        self.s.edges.append(self)
-        self.t.edges.append(self)
 
     # TODO: we want unique directed edges to have unique hashes, but hash to a single undirected equivalent
     def __hash__(self):
@@ -93,9 +89,9 @@ class Edge:
 
     def __add__(self, other):
         if isinstance(other, Edge):
-            return Edge(self.s+other.s, self.t+other.t)
+            return self.__class__(self.s+other.s, self.t+other.t, d=self.d & other.d)
         elif isinstance(other, Node):
-            return Edge(self.s+other, self.t+other)
+            return self.__class__(self.s+other, self.t+other, d=self.d)
         else:
             raise ValueError(f"Attempted to add {type(other)} to an edge")
 
@@ -135,7 +131,7 @@ class Edge:
         return atan2(y, x)
     
     def direction(self):
-        return Edge(self.s-self.s, self.t-self.s)
+        return self.__class__(self.s-self.s, self.t-self.s)
     
     def rotate(self, degrees):
         degrees = radians(degrees)
@@ -145,7 +141,7 @@ class Edge:
         d = (v[0]-v[1], w[0]+w[1])
         if isinstance(self.s[0], int):
             d = round(d[0]), round(d[1])
-        return Edge(self.s, self.s+d)
+        return self.__class__(self.s, self.s+d, d=self.d)
 
     def rotate_right(self):
         return self.rotate(-90)
@@ -260,9 +256,10 @@ class EdgeSet(setdict):
                     return self.nodes[key]
                 raise KeyError
             else:
+                key = key if isinstance(key, Edge) else Edge(*key)
                 return super().__getitem__(key, op=op)
 
-    # TODO: see if you can use the fact that connected edges are kept track of in nodes to make this more efficient
+    # TODO: keep track of the edges a node is part of within the node object to make this more efficient
     def __delitem__(self, edge):
         super().__delitem__(edge)
         for node in (edge.s, edge.t):
@@ -298,7 +295,7 @@ class EdgeSet(setdict):
             for node in other.nodes:
                 self[node, assign]
             return self
-        elif isinstance(other, Edge):
+        elif isinstance(other, Edge) or isinstance(other, Node):
             self[other, assign]
             return self
         else:
@@ -313,6 +310,11 @@ class EdgeSet(setdict):
         elif isinstance(other, Edge):
             del self[edge]
             return self
+        elif isinstance(other, Node):
+            for edge in list(self):
+                if other in edge:
+                    del self[edge]
+            del self[other]
         else:
             raise ValueError(f"Attempted to subtract object of type {type(other)} to an EdgeSet.")
 
@@ -323,16 +325,16 @@ class EdgeSet(setdict):
         
     def __sub__(self, other):
         if isinstance(other, EdgeSet):
-            return EdgeSet(*(edge for edge in self if edge not in other))
+            return self.__class__(*(edge for edge in self if edge not in other))
         else:
             raise ValueError(f"Attempted to add object of type {type(other)} to an EdgeSet.")
         
     def intersect(self, other):
-        return EdgeSet(*chain((edge for edge in self if edge in other), (edge for edge in other if edge in self)))
+        return self.__class__(*chain((edge for edge in self if edge in other), (edge for edge in other if edge in self)))
         return EdgeSet(*([edge for edge in self if edge in other]+[edge for edge in other if edge in self]))
     
     def symmetric_difference(self, other):
-        return EdgeSet(*chain((edge for edge in self if edge not in other), (edge for edge in other if edge not in self)))
+        return self.__class__(*chain((edge for edge in self if edge not in other), (edge for edge in other if edge not in self)))
         return EdgeSet(*([edge for edge in self if edge not in other]+[edge for edge in other if edge not in self]))
 
     def copy(self):
@@ -473,9 +475,9 @@ class Graph(EdgeSet):
             model.maximize(sum(xs.values()))
             model.solve()
             if model.solution is not None:
-                self._two_factor = EdgeSet(*[edge for edge in self if model.solution[str(edge)] == 1.0])
+                self._two_factor = self.__class__(*(edge for edge in self if model.solution[str(edge)] == 1.0))
             else:
-                self._two_factor = EdgeSet()
+                self._two_factor = self.__class__()
         return self._two_factor
 
     @two_factor.setter
@@ -491,8 +493,8 @@ class Graph(EdgeSet):
             x = min(Q, key=lambda node: D[node])
             Q.remove(x)
             for y in Q:
-                if y in self.neighbors(x) and Edge(x, y) in self:
-                    alt = D[x] + unweighted_weight(self[Edge(x, y)])
+                if y in self.neighbors(x) and ((x, y) in self or ((y, x) in self and not self[(y, x)].d)):
+                    alt = D[x] + unweighted_weight(self[(x, y)])
                     if alt < D[y]:
                         D[y] = alt
                         P[y] = x
@@ -686,7 +688,7 @@ class SolidGridGraph(Graph):
         sequence = [edge]
         perimeter = [edge]
         flipped_perimeter = []
-        start = Edge(edge.midpoint(), edge.parallel_right().midpoint()).midpoint()
+        start = edge.__class__(edge.midpoint(), edge.parallel_right().midpoint()).midpoint()
         def isin(box):
             return sum(e in self for e in box) == len(box)
         def n_box(edge):
@@ -710,7 +712,7 @@ class SolidGridGraph(Graph):
             setattr(strip, 'odd', False)
         if len(strip) > 0:
             setattr(strip, 'start', start)
-            setattr(strip, 'end', Edge(sequence[-1].midpoint(), sequence[-2].midpoint()).midpoint())
+            setattr(strip, 'end', edge.__class__(sequence[-1].midpoint(), sequence[-2].midpoint()).midpoint())
             setattr(strip, 'edge', sequence[0])
             setattr(strip, 'perimeter', EdgeSet(*perimeter))
             setattr(strip, 'flipped_perimeter', EdgeSet(*flipped_perimeter))

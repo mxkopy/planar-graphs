@@ -148,6 +148,7 @@ class ASTNode(metaclass=MetaASTNode):
     def __init__(self):
         self.data = []
         self.ctx = globals().copy()
+        self.tikz_ctx = {}
 
     def __iter__(self):
         yield self
@@ -190,6 +191,10 @@ class ASTNode(metaclass=MetaASTNode):
                 if isinstance(x, ASTNode):
                     cls.parse(x)
             return root
+        
+    # returns the name of a variable and its RHS
+    def exec_str(self):
+        return (None, '')
 
     def eval(self):
         results = []
@@ -215,6 +220,32 @@ class ASTNode(metaclass=MetaASTNode):
             s += '\n' if s[-1] != '\n' else ''
         return s
 
+    @property
+    def draw_ctx(self):
+        if not hasattr(self, '_draw_ctx'):
+            setattr(self, '_draw_ctx', None)
+            for child in self.data:
+                if isinstance(child, TIKZ_CTX) and child.type == 'draw':
+                    setattr(self, '_draw_ctx', child)
+        return getattr(self, '_draw_ctx')
+    
+    @draw_ctx.setter
+    def draw_ctx(self, value):
+        self._draw_ctx = value
+    
+    @property
+    def style_ctx(self):
+        if not hasattr(self, '_style_ctx'):
+            setattr(self, '_style_ctx', None)
+            for child in self.data:
+                if isinstance(child, TIKZ_CTX) and child.type == 'style':
+                    setattr(self, '_style_ctx', child)
+        return getattr(self, '_style_ctx')
+    
+    @style_ctx.setter
+    def style_ctx(self, value):
+        self._style_ctx = value
+
 
 class TIKZ_CTX(ASTNode):
 
@@ -229,7 +260,7 @@ class TIKZ_CTX(ASTNode):
     @property
     def args(self):
         return self.data[1]
-    
+
     def extract_args(string):
         args = string.split(',')
         return tuple({
@@ -291,6 +322,54 @@ class EDGES(ASTNode):
                 data.append(node)
                 return EDGES.consume(data, tokens[2:])
 
+
+class SET(ASTNode):
+
+    keywords = ['SET']
+
+    key_regex = re.compile(r'\s*([\w\-]+)\s*')
+
+    @property
+    def key(self):
+        return self.data[0]
+    
+    @property
+    def value(self):
+        return self.data[1]
+
+    def exec_str(self):
+        if isinstance(self.value, ASTNode):
+            return (self.key, f"{self.value.eval_str()})")
+        else:
+            return (self.key, f"{self.value})")
+
+    def eval(self):
+        if isinstance(self.value, ASTNode):
+            return self.value.eval()
+        if isinstance(self.value, str):
+            return eval(self.value, self.ctx)
+
+    def consume(data, tokens):
+        match tokens[0]:
+            case 'SET':
+                node = SET()
+                # if the key is the entire string, set the value to the next token
+                if SET.key_regex.fullmatch(tokens[1]) is not None:
+                    key, value = SET.key_regex.match(tokens[1]), tokens[2]
+                    key = key.group(1).lower().replace('-', '_')
+                    node.data += [key, value]
+                    data.append(node)
+                    return SET.consume(data, tokens[3:])
+                # otherwise set the value to the rest of the string
+                else:
+                    key = SET.key_regex.match(tokens[1])
+                    value = tokens[1][key.end():]
+                    key = key.group(1).lower().replace('-', '_')
+                    node.data += [key, value]
+                    data.append(node)
+                    return SET.consume(data, tokens[2:])
+
+
 class GRAPH(ASTNode):
     
     keywords = ['GRAPH', 'SGG', 'END']
@@ -311,6 +390,18 @@ class GRAPH(ASTNode):
     @property
     def children(self):
         return self.data[2:]
+    
+    def eval_str(self):
+        S = [
+            f"{self.name} = {self.type}",
+            f"graph = {self.name}"
+        ]
+        for child in self.data:
+            if isinstance(child, SET):
+                S.append('graph.' + child.eval_str())
+
+        S += [child.eval_str() for child in self.data if isinstance(child, ASTNode)]
+
     
     def eval(self):
         self.ctx['graph'] = eval(f"{self.type}()", self.ctx)
@@ -347,45 +438,6 @@ class GRAPH(ASTNode):
             case 'END':
                 return data, tokens[1:]
 
-class SET(ASTNode):
-
-    keywords = ['SET']
-
-    key_regex = re.compile(r'\s*([\w\-]+)\s*')
-
-    @property
-    def key(self):
-        return self.data[0]
-    
-    @property
-    def value(self):
-        return self.data[1]
-    
-    def eval(self):
-        if isinstance(self.value, ASTNode):
-            return self.value.eval()
-        if isinstance(self.value, str):
-            return eval(self.value, self.ctx)
-
-    def consume(data, tokens):
-        match tokens[0]:
-            case 'SET':
-                node = SET()
-                # if the key is the entire string, set the value to the next token
-                if SET.key_regex.fullmatch(tokens[1]) is not None:
-                    key, value = SET.key_regex.match(tokens[1]), tokens[2]
-                    key = key.group(1).lower().replace('-', '_')
-                    node.data += [key, value]
-                    data.append(node)
-                    return SET.consume(data, tokens[3:])
-                # otherwise set the value to the rest of the string
-                else:
-                    key = SET.key_regex.match(tokens[1])
-                    value = tokens[1][key.end():]
-                    key = key.group(1).lower().replace('-', '_')
-                    node.data += [key, value]
-                    data.append(node)
-                    return SET.consume(data, tokens[2:])
 
 class SCOPE(ASTNode):
 
@@ -489,27 +541,26 @@ class Parser:
             self.add_definitions(root)
         return root
 
+
+# IDEALLY
+# step 1. compile the graph into one python file
+# step 2. compile tikz strings from ast+python file
+# - run python file, get each variable by ID, store it into AST
+# - walk through the AST, this time creating TikZ objects
+
+# CURRENTLY
+# step 1. compile 
+
 p = Parser()
 import os
 print(os.getcwd())
 file = open('tzsl.test', 'r')
 root = p.ast(str(file.read()))
-# print(root)
+print(root)
+root.eval()
 file.close()
 
-# root.eval()
-# graph = [node for node in root if isinstance(node, GRAPH)][0]
-# graph = graph.eval()
-# print(graph.__dict__)
 
-
-class Interpreter:
-
-    def __init__(self, ast):
-        self.ast = ast
-
-
-    
 
 
 
@@ -562,14 +613,20 @@ class TikZNode(Node):
         'scale': 0.5
     })
 
-    def __new__(cls, *args, edges=[], label='', style={}):
-        node = super().__new__(cls, *args, edges=edges)
+    def __new__(cls, *args, label='', style={}):
+        node = super().__new__(cls, *args)
         node.style = TikZOptions({**TikZNode.style, **style})
         node.label = label
         return node
 
     def str(self):
         return f"\draw[{self.draw.str()}] node[{self.style.str()}] at {str(self)} {{{self.label}}};"
+    
+    def copy(self):
+        node = super().copy()
+        node.style = self.style.copy()
+        node.draw = self.draw.copy()
+        return node
     
 class TikZEdge(Edge):
 
@@ -627,6 +684,12 @@ class TikZEdge(Edge):
 
     def str(self):
         return f"\draw[{self.draw.str()}] {str(self.s)} edge[{self.style.str()}] {str(self.t)};"
+    
+    def copy(self):
+        edge = super().copy()
+        edge.style = self.style.copy()
+        edge.draw = self.draw.copy()
+        return edge
 
 class TikZGraph(Graph):
     
