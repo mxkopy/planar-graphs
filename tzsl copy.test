@@ -1,7 +1,7 @@
 EDGES draw[black, line width=1.75pt]
 NODES style[circle, draw, black, solid, fill=white, scale=0.5]
 
-DEFN SHADE-TWO-FACTOR { BACKGROUND \fill['fill=black!10'] ($x-0.5$cm-1pt, $y-0.5$cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt); for (x, y) in [midpoint_at_face(face) for face in faces if two_factor.test_interior(midpoint_at_face(face))] }
+DEFN SHADE-TWO-FACTOR { f"\\fill['fill=black!10'] ($x-0.5$cm-1pt, $y-0.5$cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);" for (x, y) in [midpoint_at_face(face) for face in faces if two_factor.test_interior(midpoint_at_face(face))] }
 DEFN MAKE-BIPARTITE { NODES (x, y, style[color=white]) for (x, y) in graph.nodes if graph.nodes[(x, y)].color == 1 }
 
 SGG alternating_strip_before_flip
@@ -16,7 +16,7 @@ SGG alternating_strip_before_flip
 END
 SGG alternating_strip_after_flip
     EDGES edge for edge in alternating_strip_before_flip style[draw=none]
-    SET TWO-FACTOR edge_flip(alternating_strip_before_flip, alternating_strip_before_flip.longest_strip).two_factor
+    SET TWO-FACTOR SolidGridGraph.edge_flip(alternating_strip_before_flip, alternating_strip_before_flip.longest_strip).two_factor
     EDGES edge for edge in graph.two_factor style[color=gray, dotted]
     EDGES edge for edge in alternating_strip_before_flip.longest_strip.flipped_perimeter + alternating_strip_before_flip.longest_strip - alternating_strip_before_flip.longest_strip.perimeter
     NODES (x, y, style[draw=none, fill=none]) for (x, y) in graph.nodes if Node(x, y) not in alternating_strip_before_flip.longest_strip_flipped

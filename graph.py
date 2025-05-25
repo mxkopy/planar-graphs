@@ -206,9 +206,6 @@ class setdict(dict):
             del self[key]
         super(setdict, self).__setitem__(key, value)
 
-    # def keys(self):
-    #     return self.values()
-
     def __getitem__(self, key, op=None):
         if op is assign and key not in self:
             super(setdict, self).__setitem__(key, key)
@@ -236,9 +233,10 @@ class EdgeSet(setdict):
             self.nodes[edge.t, assign]
 
     def __getitem__(self, key, op=None):
+        keytype = Edge if list(map(lambda t: isinstance(t, tuple), key)) == [True, True] else Node
         if op is assign:
-            if isinstance(key, Node):
-                newnode = self.nodes[key, assign]
+            if keytype == Node:
+                newnode = self.nodes[key if isinstance(key, Node) else Node(*key), assign]
                 for edge in self:
                     if edge.s == newnode:
                         edge.s = newnode
@@ -257,13 +255,9 @@ class EdgeSet(setdict):
                     self.nodes[edge.t, assign]
                 return super().__getitem__(edge, op=op)
         else:
-            if isinstance(key, Node):
+            if keytype == Node:
                 if key in self.nodes:
                     return self.nodes[key]
-                raise KeyError
-                for edge in self:
-                    if key in edge:
-                        return edge
                 raise KeyError
             else:
                 return super().__getitem__(key, op=op)
@@ -406,15 +400,6 @@ class EdgeSet(setdict):
 
 @opunpack
 class Graph(EdgeSet):
-
-    def __getitem__(self, edge, op=None):
-        if self.is_admissible_edge(edge):
-            return super().__getitem__(edge, op=op)
-        else:
-            raise KeyError(f"Attempted to set an inadmissible edge {edge} to the graph.")
-    
-    def is_admissible_edge(self, edge):
-        return True
 
     def neighbors(self, node):
         return [edge.other(node) for edge in self if node in edge]
@@ -615,13 +600,6 @@ class SolidGridGraph(Graph):
 
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    def is_admissible_edge(self, edge):
-        edge = Edge(*edge)
-        for d in SolidGridGraph.directions:
-            if edge.s + d == edge.t:
-                return True
-        return False
-
     def neighbors(self, node: Node):
             # THIS IS FUCKING MADDENING
             # print(hash((-2, 3)), hash((-1, 3)))
@@ -740,15 +718,14 @@ class SolidGridGraph(Graph):
 
     def get_alternating_strips(self):
         # dual = SolidGridGraph.get_dual(self)
-        two_factor = self.two_factor
         alternating_strips = []
         alternating_strip_edges = EdgeSet()
         for edge in self:
             for edge in [edge, edge.switch()]:
                 x1, y1 = edge.midpoint()
                 x2, y2 = edge.parallel_right().midpoint()
-                if not two_factor.test_interior(((x1+x2)/2, (y1+y2)/2)):
-                    strip = SolidGridGraph.get_alternating_strip(two_factor, edge)
+                if not self.two_factor.test_interior(((x1+x2)/2, (y1+y2)/2)):
+                    strip = SolidGridGraph.get_alternating_strip(self.two_factor, edge)
                     if len(strip) > 1 and strip not in alternating_strips:
                         alternating_strips.append(strip)
                         alternating_strip_edges += strip
@@ -772,7 +749,6 @@ class SolidGridGraph(Graph):
             setattr(node, 'interior', face in self.interior_faces)
             dual.nodes[node, assign]
         dual = dual.make_solid()
-        dual.is_admissible_edge = lambda *args: True
         exterior_nodes = set([x for x in dual.nodes if not x.interior])
         for a in exterior_nodes:
             for b in exterior_nodes:

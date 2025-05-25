@@ -1,24 +1,24 @@
 EDGES draw[black, line width=1.75pt]
 NODES style[circle, draw, black, solid, fill=white, scale=0.5]
 
-DEFN MAKE-BIPARTITE {ayoo}
-DEFN SHADE-TWO-FACTOR {pls}
+DEFN MAKE-BIPARTITE { NODES (x, y, style[color=white]) for (x, y) in graph.nodes if graph.make_bipartite().nodes[(x, y)].color == 1 }
+DEFN SHADE-TWO-FACTOR { f"\\fill['fill=black!10'] ($x-0.5$cm-1pt, $y-0.5$cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);" for (x, y) in [graph.midpoint_at_face(face) for face in faces if graph.two_factor.test_interior(graph.midpoint_at_face(face))] }
 
 SGG alternating_strip_before_flip
     EDGES ((1, 0), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((2, 2), (2, 1)), ((1, 4), (1, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 6), (1, 5)), ((1, 5), (2, 5)), ((2, 6), (2, 5)), ((1, 7), (2, 7)), ((0, 0), (1, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 4), (0, 4)), ((0, 4), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (1, 6)), ((2, 6), (3, 6)), ((3, 6), (3, 5)), ((3, 5), (3, 4)), ((3, 4), (2, 4)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (0, 9)), ((0, 9), (1, 9)), ((1, 9), (2, 9)), ((2, 9), (3, 9)), ((3, 9), (3, 8)), ((3, 8), (2, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 6)), ((2, 6), (1, 6)), ((1, 6), (1, 7)), ((0, 5), (1, 5)), ((1, 5), (1, 4)), ((1, 4), (2, 4)), ((2, 5), (2, 4)), ((2, 5), (3, 5)), ((1, 8), (2, 8)), ((1, 9), (1, 8)), ((2, 9), (2, 8)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((2, 0), (2, 1)), ((2, 1), (3, 1)) style[draw=none]
-    SET TWO-FACTOR ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7)) style[color=gray, dotted]
-    SET LONGEST-STRIP max(get_alternating_strips(), key=len)
-    EDGES edge for edge in longest_strip
-    EDGES edge for edge in two_factor style[color=gray, dotted]
-    NODES (x, y, style[draw=none, fill=none]) for (x, y) in graph.nodes if Node(x, y) not in longest_strip
+    SET TWO-FACTOR EDGES ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7)) style[color=gray, dotted]
+    SET LONGEST-STRIP max(graph.get_alternating_strips(), key=len)
+    SET LONGEST-STRIP-FLIPPED graph.longest_strip.flipped_perimeter + graph.longest_strip - graph.longest_strip.perimeter
+    EDGES edge for edge in graph.longest_strip
+    EDGES edge for edge in graph.two_factor style[color=gray, dotted]
+    NODES (x, y, style[draw=none, fill=none]) for (x, y) in graph.nodes if Node(x, y) not in max(graph.get_alternating_strips(), key=len)
     MAKE-BIPARTITE
     SHADE-TWO-FACTOR
 END
 SGG alternating_strip_after_flip
-    EDGES edge for edge in alternating_strip_before_flip style[draw=none]
-    SET TWO-FACTOR edge_flip(alternating_strip_before_flip, alternating_strip_before_flip.longest_strip).two_factor
+    EDGES alternating_strip_before_flip.edge_flip(alternating_strip_before_flip.longest_strip) style[draw=none]
     EDGES edge for edge in graph.two_factor style[color=gray, dotted]
-    EDGES edge for edge in alternating_strip_before_flip.longest_strip.flipped_perimeter + alternating_strip_before_flip.longest_strip - alternating_strip_before_flip.longest_strip.perimeter
+    EDGES edge for edge in alternating_strip_before_flip.longest_strip_flipped
     NODES (x, y, style[draw=none, fill=none]) for (x, y) in graph.nodes if Node(x, y) not in alternating_strip_before_flip.longest_strip_flipped
     MAKE-BIPARTITE
     SHADE-TWO-FACTOR

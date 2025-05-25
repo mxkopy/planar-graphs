@@ -75,316 +75,440 @@ import integer_linear_model
 #      - split text by TZSL keywords, then build AST by applying scopes
 #   2. lower AST to python 
 #   3. repeat 1-3 until no keywords are left.
+
+
+
+# class FOREGROUND(ASTNode):
+
+#     keywords = ['FOREGROUND']
+
+#     def consume(data, tokens):
+#         match tokens[0]:
+#             case 'FOREGROUND':
+#                 node = FOREGROUND()
+#                 node.data.append(tokens[1])
+#                 data.append(node)
+#                 return FOREGROUND.consume(data, tokens[2:])
+
+# class BACKGROUND(ASTNode):
+
+#     keywords = ['BACKGROUND']
+
+#     def consume(data, tokens):
+#         match tokens[0]:
+#             case 'BACKGROUND':
+#                 node = BACKGROUND()
+#                 node.data.append(tokens[1])
+#                 data.append(node)
+#                 return BACKGROUND.consume(data, tokens[2:])
+
+# class TEX(ASTNode):
+
+#     keywords = ['\\', 'TEX', ';', '%']
+
+#     def consume(data, tokens):
+#         match tokens[0]:
+#             case '\\' | 'TEX':
+#                 node = TEX()
+#                 if tokens[0] == '\\':
+#                     node.data.append(True)
+#                 _, rest_tokens = TEX.consume(node.data, tokens[1:])
+#                 data.append(node)
+#                 return TEX.consume(node.data, rest_tokens)
+#             case ';' | '%':
+#                 if tokens[0] == ';':
+#                     data.append(True)
+#                 return data, tokens[1:]
+
+
 import re
-from functools import partial
+import ast
 
-GRAPH_TYPES = {
-    'EDGESET': EdgeSet,
-    'GRAPH': Graph,
-    'SGG': SolidGridGraph
-}
+class MetaASTNode(type):
 
-KEYWORDS = [
-    "DEFN",
-    "\\\\",
-    "{",
-    "}",
-    "EDGESET",
-    "GRAPH",
-    "SGG",    
-    "EDGES",
-    "NODES",
-    "FOREGROUND",
-    "BACKGROUND",
-    "SET",
-    # "\t",
-    "\n",
-    "END",
-    "TEX",
-    "\;",
-    "\%",
-    # "\\$(\.\*\?)\\$"
-]
-
-class ASTNode:
-
-    def __init__(self, **args):
-        self.args = args
-        self.data = []
-        # self.consume = self.__consume__()
-
-    def __eq__(self, other):
-        if not isinstance(other, ASTNode):
-            return False
-        return self.data == other.data and self.args == other.args
-    
-    # consume text, getting output symbol and unconsumed/scoped text
-    # add output symbol to the root node's data, then recurse on the next set of tokens
-    # 
-    def __consume__(self):
-        def consume(root, tokens):
+    def __consume__(cls, cls_consume):
+        def consume(data, tokens):
             if len(tokens) == 0:
-                return root, []
-            F = self.__class__.consume(root, tokens)
+                return data, []
+            F = cls_consume(data, tokens)
             if F is not None:
                 return F
-            root.data.append(tokens[0])
-            return self.consume(root, tokens[1:])
+            data.append(tokens[0])
+            return cls.consume(data, tokens[1:])
         return consume
 
-class SCOPE(ASTNode):
+    def __new__(meta_cls, name, parents, attrs):
+        new_cls = super().__new__(meta_cls, name, parents, attrs)
+        new_cls.consume = MetaASTNode.__consume__(new_cls, new_cls.consume)
+        return new_cls
 
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
-        match tokens[0]:
-            case '{':
-                node, rest_tokens = SCOPE.consume(SCOPE(), tokens[1:])
-                root.data.append(node)
-                return SCOPE.consume(root, rest_tokens)
-            case '}':
-                return root, tokens[1:]
-            case _:
-                root.data.append(tokens[0])
-                return SCOPE.consume(root, tokens[1:])
 
-class DEFN(ASTNode):
+class ASTNode(metaclass=MetaASTNode):
 
-    def get_args(tokens):
-        args = re.match(r'(\w+)\s*(.*)', tokens)
-        return {
-            'name': args.group(1), 
-            'args': re.split(r'\s+', args.group(2) if args.group(2) is not None else [])
-        }
+    def __init__(self):
+        self.data = []
+        self.ctx = globals().copy()
 
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
-        match tokens[0]:
-            case 'DEFN':
-                node = DEFN()
-                node.data += tokens[1:3]
-                root.data.append(node)
-                return DEFN.consume(root, tokens[3:])
-            case _:
-                root.data.append(tokens[0])
-                return DEFN.consume(root, tokens[1:])
+    def __iter__(self):
+        yield self
+        for x in self.data:
+            if isinstance(x, ASTNode):
+                yield from iter(x)
+            else:
+                yield x
 
-class GRAPH(ASTNode):
+    def __eq__(self, other):
+        if other == None:
+            return False
+        X, Y = iter(self), iter(other)
+        x = next(X, None)
+        y = next(Y, None)
+        while x is not None and y is not None:
+            x = next(X, None)
+            y = next(Y, None)
+            if x != y:
+                return False
+        return True
     
-    def get_args(tokens):
-        return {
-            'type': GRAPH_TYPES[tokens[0]], 
-            'name': tokens[1]
-        }
-
-    def consume(root, tokens):
+    # consume text, getting output symbol and unconsumed/scoped text
+    # add output symbol to the root node's data, then recurse on the remaining set of tokens
+    def consume(data, tokens):
         if len(tokens) == 0:
-            return root, []
-        match tokens[0]: 
-            case 'EDGESET' | 'GRAPH' | 'SGG':
-                node = GRAPH()
-                node.data.append(tokens[1])
-                node, rest_tokens = GRAPH.consume(node, tokens[2:])
-                root.data.append(node)
-                return GRAPH.consume(root, rest_tokens)
-            case 'END':
-                return root, tokens[1:]
-            case _:
-                root.data.append(tokens[0])
-                return GRAPH.consume(root, tokens[1:])
+            return data, []
+        else:
+            data.append(tokens[0])
+            return ASTNode.consume(data, tokens[1:])
 
-class EDGES(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
-        match tokens[0]:
-            case 'EDGES':
-                node = EDGES()
-                node.data.append(tokens[1])
-                root.data.append(node)
-                return EDGES.consume(root, tokens[2:])
-            case _:
-                root.data.append(tokens[0])
-                return EDGES.consume(root, tokens[1:])
+    @classmethod
+    def parse(cls, root):
+        if isinstance(root, list):
+            new_data, _ = cls.consume([], root)
+            return new_data
+        else:
+            root.data, _ = cls.consume([], root.data)
+            for x in root.data:
+                if isinstance(x, ASTNode):
+                    cls.parse(x)
+            return root
+
+    def eval(self):
+        results = []
+        for child in self.data:
+            if isinstance(child, ASTNode):
+                child.ctx = self.ctx
+                results.append(child.eval())
+        return results
+
+    def __str__(self):
+        if not hasattr(self, 'depth'):
+            setattr(self, 'depth', 1)
+        # arg_str = ' '.join(f"{k}={v}" for k, v in self.args.values())
+        s = f"{self.__class__.__name__}\n"
+        for i in range(len(self.data)):
+            data = self.data[i]
+            if isinstance(data, ASTNode):
+                setattr(data, 'depth', self.depth+1)
+            delim = ''.join([f'|   ']*(self.depth-1)+['|--'])
+            s += f"{delim} {str(data)}"
+            if isinstance(data, ASTNode):
+                delattr(data, 'depth')
+            s += '\n' if s[-1] != '\n' else ''
+        return s
+
+
+class TIKZ_CTX(ASTNode):
+
+    keywords = []
+
+    re = re.compile(r'.*?(draw|style)\[(.*?)\]')
+
+    @property
+    def type(self):
+        return self.data[0]
+
+    @property
+    def args(self):
+        return self.data[1]
+    
+    def extract_args(string):
+        args = string.split(',')
+        return tuple({
+            Parser.strip_whitespace(arg.split('=')[0]): Parser.strip_whitespace(arg.split('=')[1]) 
+        } if '=' in arg else Parser.strip_whitespace(arg)
+        for arg in args)
+
+    def consume(data, tokens):
+        if not isinstance(tokens[0], str) or TIKZ_CTX.re.match(tokens[0]) is None:
+            data.append(tokens[0])
+            return TIKZ_CTX.consume(data, tokens[1:])
+        else:
+            node = TIKZ_CTX()
+            match = TIKZ_CTX.re.match(tokens[0])
+            node.data += [match.group(1), TIKZ_CTX.extract_args(match.group(2))]
+            new_string = re.sub(r'\s*(draw|style)\[(.*?)\]\s*', '', tokens[0])
+            if not Parser.is_whitespace(new_string):
+                data.append(new_string)
+            data.append(node)
+            return TIKZ_CTX.consume(data, tokens[1:])
 
 class NODES(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
+
+    keywords = ['NODES']
+
+    def eval(self):
+        if isinstance(self.data[0], str):
+            node_set = setdict()
+            nodes = eval(f"({self.data[0]})", self.ctx)
+            for node in nodes:
+                node_set[node, assign]
+            return node_set
+
+    def consume(data, tokens):
         match tokens[0]:
             case 'NODES':
                 node = NODES()
                 node.data.append(tokens[1])
-                root.data.append(node)
-                return NODES.consume(root, tokens[2:])
-            case _:
-                root.data.append(tokens[0])
-                return NODES.consume(root, tokens[1:])
+                data.append(node)
+                return NODES.consume(data, tokens[2:])
+
+class EDGES(ASTNode):
+
+    keywords = ['EDGES']
+
+    def eval(self):
+        if isinstance(self.data[0], str):
+            edge_set = EdgeSet()
+            edges = eval(f"({self.data[0]})", self.ctx)
+            for edge in edges:
+                edge_set[edge, assign]
+            return edge_set
+
+    def consume(data, tokens):
+        match tokens[0]:
+            case 'EDGES':
+                node = EDGES()
+                node.data.append(tokens[1])
+                data.append(node)
+                return EDGES.consume(data, tokens[2:])
+
+class GRAPH(ASTNode):
+    
+    keywords = ['GRAPH', 'SGG', 'END']
+
+    TYPES = {
+        'GRAPH': 'Graph',
+        'SGG': 'SolidGridGraph'
+    }
+
+    @property
+    def type(self):
+        return self.data[0]
+
+    @property
+    def name(self):
+        return self.data[1]
+    
+    @property
+    def children(self):
+        return self.data[2:]
+    
+    def eval(self):
+        self.ctx['graph'] = eval(f"{self.type}()", self.ctx)
+        self.ctx[f"{self.name}"] = self.ctx['graph']
+        setattr(self.ctx['graph'], 'edge_sets', [])
+        setattr(self.ctx['graph'], 'node_sets', [])
+        for child in self.children:
+            if isinstance(child, ASTNode):
+                child.ctx = self.ctx
+                if isinstance(child, EDGES):
+                    edge_sets = getattr(self.ctx['graph'], 'edge_sets')
+                    edge_set = child.eval()
+                    edge_sets.append(edge_set)
+                    for edge in edge_set:
+                        self.ctx['graph'][edge, assign]
+                if isinstance(child, NODES):
+                    node_sets = getattr(self.ctx['graph'], 'node_sets')
+                    node_set = child.eval()
+                    node_sets.append(node_set)
+                    for node in node_set:
+                        self.ctx['graph'][node, assign]
+                if isinstance(child, SET):
+                    setattr(self.ctx['graph'], child.key, child.eval())
+        return self.ctx['graph']
+
+    def consume(data, tokens):
+        match tokens[0]: 
+            case 'GRAPH' | 'SGG':
+                node = GRAPH()
+                node.data += [GRAPH.TYPES[tokens[0]], tokens[1]]
+                _, rest_tokens = GRAPH.consume(node.data, tokens[2:])
+                data.append(node)
+                return GRAPH.consume(data, rest_tokens)
+            case 'END':
+                return data, tokens[1:]
 
 class SET(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
+
+    keywords = ['SET']
+
+    key_regex = re.compile(r'\s*([\w\-]+)\s*')
+
+    @property
+    def key(self):
+        return self.data[0]
+    
+    @property
+    def value(self):
+        return self.data[1]
+    
+    def eval(self):
+        if isinstance(self.value, ASTNode):
+            return self.value.eval()
+        if isinstance(self.value, str):
+            return eval(self.value, self.ctx)
+
+    def consume(data, tokens):
         match tokens[0]:
             case 'SET':
                 node = SET()
-                node.data.append(tokens[1])
-                root.data.append(node)
-                return SET.consume(root, tokens[2:])
-            case _:
-                root.data.append(tokens[0])
-                return SET.consume(root, tokens[1:])
+                # if the key is the entire string, set the value to the next token
+                if SET.key_regex.fullmatch(tokens[1]) is not None:
+                    key, value = SET.key_regex.match(tokens[1]), tokens[2]
+                    key = key.group(1).lower().replace('-', '_')
+                    node.data += [key, value]
+                    data.append(node)
+                    return SET.consume(data, tokens[3:])
+                # otherwise set the value to the rest of the string
+                else:
+                    key = SET.key_regex.match(tokens[1])
+                    value = tokens[1][key.end():]
+                    key = key.group(1).lower().replace('-', '_')
+                    node.data += [key, value]
+                    data.append(node)
+                    return SET.consume(data, tokens[2:])
 
-class FOREGROUND(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
-        match tokens[0]:
-            case 'FOREGROUND':
-                node = FOREGROUND()
-                node.data.append(tokens[1])
-                root.data.append(node)
-                return FOREGROUND.consume(root, tokens[2:])
-            case _:
-                root.data.append(tokens[0])
-                return FOREGROUND.consume(root, tokens[1:])
+class SCOPE(ASTNode):
 
-class BACKGROUND(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
-        match tokens[0]:
-            case 'BACKGROUND':
-                node = BACKGROUND()
-                node.data.append(tokens[1])
-                root.data.append(node)
-                return BACKGROUND.consume(root, tokens[2:])
-            case _:
-                root.data.append(tokens[0])
-                return BACKGROUND.consume(root, tokens[1:])
+    keywords = ['{', '}', '\n']
 
-class TEX(ASTNode):
-    def consume(root, tokens):
-        if len(tokens) == 0:
-            return root, []
+    def consume(data, tokens):
         match tokens[0]:
-            case '\\' | 'TEX':
-                node = TEX()
-                if tokens[0] == '\\':
-                    node.data.append(True)
-                node, rest_tokens = SCOPE.consume(node, tokens[1:])
-                root.data.append(node)
-                return TEX.consume(root, rest_tokens)
-            case ';' | '%':
-                if tokens[0] == ';':
-                    root.data.append(True)
-                return root, tokens[1:]
-            case _:
-                root.data.append(tokens[0])
-                return TEX.consume(root, tokens[1:])
+            case '{':
+                node = SCOPE()
+                _, rest_tokens = SCOPE.consume(node.data, tokens[1:])
+                data.append(node)
+                return SCOPE.consume(data, rest_tokens)
+            case '}':
+                return data, tokens[1:]
+
+class DEFN(ASTNode):
+    
+    keywords = ['DEFN']
+
+    @property
+    def name(self):
+        return self.data[0]
+    
+    @property
+    def scope(self):
+        return self.data[1]
+
+    def consume(data, tokens):
+        match tokens[0]:
+            case 'DEFN':
+                node = DEFN()
+                node.data += tokens[1:3]
+                data.append(node)
+                return DEFN.consume(data, tokens[3:])
+
+    def register(self, ast_nodes):
+        @classmethod
+        def consume(cls, data, tokens, name=self.name, scope=self.scope):
+            if isinstance(tokens[0], DEFN):
+                return cls.consume(data, tokens[1:])
+            if tokens[0] == name:
+                data += scope.data
+                return cls.consume(data, tokens[1:])
+        node_type = MetaASTNode.__new__(MetaASTNode, self.name, (ASTNode,), {'consume': consume, 'keywords': [self.name]})
+        ast_nodes.append(node_type)
+
 
 class Parser:
 
+    AST_NODES = [NODES, EDGES, GRAPH, SET, TIKZ_CTX, SCOPE, DEFN]
+
+    @property
+    def KEYWORDS(self):
+        if not hasattr(self, '_ast_nodes_len') or self._ast_nodes_len != len(self.AST_NODES):
+            setattr(self, '_ast_nodes_len', len(self.AST_NODES))
+            setattr(self, '_keywords', sum((node_type.keywords for node_type in self.AST_NODES), []))
+        return self._keywords
+
     def __init__(self):
-        self.KEYWORDS = KEYWORDS
-        self.AST_NODES = [TEX, NODES, EDGES, FOREGROUND, BACKGROUND, GRAPH, SET, SCOPE]
+        self.AST_NODES = Parser.AST_NODES.copy()
+
+    def escape_keyword(keyword):
+        match keyword:
+            case '\\':
+                return '\\\\'
+            case _:
+                return keyword
+
+    def is_whitespace(text):
+        return re.fullmatch(r"\s*", text) is not None
+    
+    # removes leading and trailing whitespace
+    def strip_whitespace(text):
+        return text if re.match(r"\s*(.*?)\s*$", text) is None else re.match(r"\s*(.*?)\s*$", text).group(1)        
 
     def tokenize(self, text):
-        is_whitespace = lambda text: re.fullmatch(r"\s*", text) is not None # check if a token is only whitespace
-        remove_trailing_whitespace = lambda text: text if re.match(r"\s*(.*?)\s*$", text) is None else re.match(r"\s*(.*?)\s*$", text).group(1) # get rid of leading and trailing whitespace
-        keyword_regexes = [f"(?!{chr(92)}{chr(92)}{keyword}){keyword}" for keyword in self.KEYWORDS] # allow for escaping keywords
-        tokens = list(remove_trailing_whitespace(phrase) for phrase in re.split(f"({'|'.join(keyword_regexes)})", text) if not is_whitespace(phrase))
+        keyword_regexes = [f"(?!{chr(92)}{chr(92)}{Parser.escape_keyword(keyword)}){Parser.escape_keyword(keyword)}" for keyword in self.KEYWORDS] # allow for escaping keywords
+        tokens = list(Parser.strip_whitespace(phrase) for phrase in re.split(f"({'|'.join(keyword_regexes)})", text) if not Parser.is_whitespace(phrase))
         return tokens
 
-    def retokenize(self, root):
-        data = []
-        for x in root.data:
-            if isinstance(x, ASTNode):
-                self.retokenize(x)
-                data.append(x)
-            if isinstance(x, str):
-                tokens = self.tokenize(x)
-                data += tokens
-        root.data = data
-
-    def parse(self, root, T):
-        scope, unparsed = T.consume(ASTNode(), root.data)
-        root.data = scope.data + unparsed
-        for data in root.data:
-            if isinstance(data, ASTNode):
-                self.parse(data, T)
-        return root
-
-    def add_definitions(self, root):
-        for x in root.data:
-            if isinstance(x, DEFN):
-                name = x.data[0]
-                scope = x.data[-1]
-                self.KEYWORDS.append(name)
-                node_type = type(name, (ASTNode,), {})
-                self.AST_NODES.append(node_type)
-                def consume(root, tokens, name=name, scope=scope, node_type=node_type):
-                    if len(tokens) == 0:
-                        return root, []
-                    if isinstance(tokens[0], DEFN):
-                        return node_type.consume(root, tokens[1:])
-                    if tokens[0] == name:
-                        root.data.append(scope)
-                        return node_type.consume(root, tokens[1:])
-                    root.data.append(tokens[0])
-                    return node_type.consume(root, tokens[1:])
-                node_type.consume = consume
-            elif isinstance(x, ASTNode):
-                self.add_definitions(x)
-
     def expand_ast(self, root):
-        node = ASTNode()
-        while root != node:
-            for T in self.AST_NODES:
-                root = self.parse(root, T)
-            root = self.parse(root, DEFN)
-            node.args = root.args
-            node.data = root.data
-            self.add_definitions(root)
-            # self.retokenize(root)
-            for T in self.AST_NODES:
-                root = self.parse(root, T)
-        return root
+        for T in self.AST_NODES:
+            T.parse(root)
+    
+    def add_definitions(self, root):
+        for node in root:
+            if isinstance(node, DEFN):
+                node.register(self.AST_NODES)
+    
+    def next_unresolved_keyword(self, root):
+        for node in root:
+            if isinstance(node, str) and node in self.KEYWORDS:
+                return node
+        return None
 
     def ast(self, text):
-        tokens = self.tokenize(text)
-        root = SCOPE()
-        root.data += tokens
-        return self.expand_ast(root)
+        root = ASTNode()
+        root.data = self.tokenize(text)
+        while self.next_unresolved_keyword(root) is not None:
+            self.expand_ast(root)
+            self.add_definitions(root)
+        return root
 
 p = Parser()
 import os
 print(os.getcwd())
 file = open('tzsl.test', 'r')
 root = p.ast(str(file.read()))
+# print(root)
 file.close()
-# print(root.data[2].data[1].data)
-# print(root.data)
-def print_ast(node, s='', lvl=0):
-    if isinstance(node, ASTNode):
-        print(f"{'-'*lvl}{node.__class__.__name__} {node.args}")
-        if isinstance(node.data, list):
-            for x in node.data:
-                if isinstance(x, ASTNode):
-                    print_ast(x, s, lvl+1)
-                else:
-                    print(f"{'-'*(lvl+1)}{x}")
-        else:
-            print(f"{'-'*(lvl+1)}{node.data}")
-        return s
 
-print_ast(root)
+# root.eval()
+# graph = [node for node in root if isinstance(node, GRAPH)][0]
+# graph = graph.eval()
+# print(graph.__dict__)
+
 
 class Interpreter:
 
-    def __init__(self):
-        self.ctx = {}
+    def __init__(self, ast):
+        self.ast = ast
+
+
     
 
 
@@ -411,6 +535,9 @@ class TikZOptions(dict):
 
     def str(self):
         return ', '.join([f"{key}={str(self[key])}" if self[key] is not None else str(key) for key in self.keys()])
+
+    def copy(self):
+        return TikZOptions(**super().copy())
 
     COLOR = lambda color, tikz: TikZOptions.color(color, tikz)
     GRAY = lambda tikz: TikZOptions.color('gray', tikz)
@@ -443,19 +570,19 @@ class TikZNode(Node):
 
     def str(self):
         return f"\draw[{self.draw.str()}] node[{self.style.str()}] at {str(self)} {{{self.label}}};"
-
+    
 class TikZEdge(Edge):
 
     ARROW_ANGLE = 45
 
-    DIRECTED = lambda edge: TikZOptions.style('shorten >', '3', TikZOptions.style('->', None, TikZEdge(*edge)))
+    DIRECTED = lambda edge: TikZOptions.style('shorten >', '3', TikZOptions.style('->', None, TikZEdge(edge)))
     
-    GRAY = lambda edge: TikZOptions.color('gray', TikZEdge(*edge))
+    GRAY = lambda edge: TikZOptions.color('gray', TikZEdge(edge))
 
-    SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(*edge))
+    SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(edge))
 
     # DOTTED = lambda edge: TikZOptions.style('dash pattern', f"on 10 off 10", TikZEdge(*edge))
-    DOTTED = lambda edge: TikZOptions.style('dotted', None, TikZEdge(*edge))
+    DOTTED = lambda edge: TikZOptions.style('dotted', None, TikZEdge(edge))
 
 
     # SHORT = lambda edge: TikZEdge(
@@ -481,19 +608,25 @@ class TikZEdge(Edge):
     style = TikZOptions({
         'color': 'black',
     })
-
-    def __getitem__(self, idx):
-        return [self.s, self.t, self.d, self.draw, self.style][idx]
     
-    # TODO: make Edge generic so this isn't necessary
-    def __init__(self, s, t, d=False, draw={}, style={}):
-        super().__init__(s if isinstance(s, TikZNode) else TikZNode(*s), t if isinstance(t, TikZNode) else TikZNode(*t), d=d)
-        self.style = TikZOptions({**TikZEdge.style, **style})
-        self.draw = TikZOptions({**TikZEdge.draw, **draw})
+    def __init__(self, *args, **kwargs):
+        if isinstance(args[0], Edge):
+            edge = args[0]
+        elif len(args) == 1:
+            edge = Edge(*args[0])
+        else:
+            edge = Edge(*args, **kwargs)
+        self.style = TikZEdge.style.copy()
+        self.draw = TikZEdge.draw.copy()
+        if isinstance(edge, TikZEdge):
+            self.style |= edge.style
+            self.draw |= edge.draw
+        s = edge.s if isinstance(edge.s, TikZNode) else TikZNode(*edge.s)
+        t = edge.t if isinstance(edge.t, TikZNode) else TikZNode(*edge.t)
+        super().__init__(s, t, d=edge.d)
 
     def str(self):
         return f"\draw[{self.draw.str()}] {str(self.s)} edge[{self.style.str()}] {str(self.t)};"
-
 
 class TikZGraph(Graph):
     
@@ -509,13 +642,13 @@ class TikZGraph(Graph):
     def __init__(self, *edges):
         super().__init__()
         for edge in edges:
-            self[TikZEdge(*edge), assign]
+            self[TikZEdge(edge), assign]
         self.edgesets = []
         self.background = []
         self.foreground = []
 
     def add_edges(self, *args):
-        for edges in [[TikZEdge(*edge) for edge in edges] for edges in args]:
+        for edges in [[TikZEdge(edge) for edge in edges] for edges in args]:
             self.edgesets.append(edges)
         return self
 

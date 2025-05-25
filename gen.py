@@ -24,7 +24,7 @@ def visualize_hamiltonian_cycle(name, graph):
     tfc = EdgeSet(*graph.two_factor.as_cycle_facing_inwards()).nodes
     while set(tfc) != set(graph.nodes) and len(tfc) != 0:
         strip = graph.static_alternating_strip()
-        tgraph.add_edges([TikZEdge(*edge) for edge in strip])
+        tgraph.add_edges([TikZEdge(edge) for edge in strip])
         tgraph.add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in tgraph if not tgraph.two_factor.test_interior(edge.midpoint()) and edge not in tgraph.two_factor])
         tgraph.write(f'{name}{i}')
         graph.edge_flip(strip)
@@ -43,7 +43,7 @@ tikz_strategy = TikZGraph()
 for node in strategy.nodes:
     tikz_strategy[TikZNode(*node), assign]
 tikz_strategy.make_bipartite()\
-    .add_edges(TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1])) for edge in strategy.keys())\
+    .add_edges(TikZEdge.DIRECTED(edge) for edge in strategy.keys())\
     .write("strategy")
 
 i = 0
@@ -58,9 +58,9 @@ for graph in [
 ]:
     uot = graph.union_of_tours()
     TikZGraph(*list(graph)).make_bipartite()\
-        .add_edges([TikZEdge.DIRECTED(TikZEdge(edge[0], edge[1], d=True)) for edge in uot])\
-        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(edge[0], edge[1]))) for edge in graph])\
-        .add_edges([TikZOptions.BLUE(TikZEdge(edge.s, edge.t)) for edge in graph.unfurl_uot(uot)])\
+        .add_edges([TikZEdge.DIRECTED(Edge(*edge, d=True)) for edge in uot])\
+        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph])\
+        .add_edges([TikZOptions.BLUE(edge) for edge in graph.unfurl_uot(uot)])\
         .write(f'uot{i}')
     i+=1
     del uot
@@ -86,7 +86,7 @@ for r, c in product(*[range(0, s) for s in cat.shape]):
 for d in SolidGridGraph.directions:
     for node in cat_graph.nodes:
         if node+d in cat_graph.nodes:
-            cat_graph[TikZEdge(node, node+d), assign]
+            cat_graph[TikZEdge(Edge(node, node+d)), assign]
 
 # cat_graph = TikZGraph(*cat_edges)
 for node in cat_graph.nodes:
@@ -109,7 +109,7 @@ example_graph_length = 2
 example_graph = TikZGraph(((0, 0), (example_graph_length, 0)), ((example_graph_length, 0), (example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5 )), ((example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5), (0, 0)))
 midpoint = sum(node[0] for node in example_graph.nodes)/3, sum(node[1] for node in example_graph.nodes)/3
 for edge in list(example_graph):
-    example_graph[TikZEdge(edge.t, midpoint), assign]
+    example_graph[TikZEdge(Edge(edge.t, midpoint)), assign]
 
 example_graph.add_edges(
     [TikZEdge((example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5), (0, 0)), TikZEdge((example_graph_length, 0), midpoint)]
@@ -282,7 +282,7 @@ big_two_factor_graph.add_background(*shaded)
 
 big_two_factor_graph.add_edges(
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZEdge(edge.s, edge.t, style={'shorten <': '0', 'shorten >': '0'}))) for edge in big_two_factor_graph.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor
     ]
 )
 
@@ -319,15 +319,15 @@ del cubic_graph
 cubic_embedding = TikZGraph(((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 3), (0, 3)), ((0, 4), (0, 3)), ((1, 4), (2, 4)), ((2, 4), (2, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((2, 4), (3, 4)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)), ((0, 3), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((2, 1), (3, 1)), ((3, 2), (3, 1)), ((2, 2), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 3)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 2), (4, 3)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 0), (4, 0)), ((4, 0), (4, 1)))
 cubic_embedding.make_bipartite()
 cubic_embedding.add_edges(
-    [TikZOptions.COLOR('red', TikZEdge(*edge)) for edge in [((2, 2), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (1, 4)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0))]]
+    [TikZOptions.COLOR('red', TikZEdge(edge)) for edge in [((2, 2), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (1, 4)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0))]]
 )
 
 cubic_embedding.add_edges(
-    [TikZOptions.COLOR('blue', TikZEdge(*edge)) for edge in [((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((4, 0), (3, 0)), ((2, 4), (1, 4)), ((2, 4), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2))]]
+    [TikZOptions.COLOR('blue', TikZEdge(edge)) for edge in [((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((4, 0), (3, 0)), ((2, 4), (1, 4)), ((2, 4), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2))]]
 )
 
 cubic_embedding.add_edges(
-    [TikZEdge(*edge) for edge in [((0, 0), (0, 1)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]]
+    [TikZEdge(edge) for edge in [((0, 0), (0, 1)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]]
 )
 
 cubic_embedding.write('cubic_embedding')
@@ -338,7 +338,7 @@ type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 
 type_3_before_flip.make_bipartite()
 type_3_before_flip.add_edges(
     [
-        TikZEdge(*edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]
+        TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
         TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip
@@ -353,7 +353,7 @@ type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0
 type_3_after_flip.make_bipartite()
 type_3_after_flip.add_edges(
     [
-        TikZEdge(*edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]
+        TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
         TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip
@@ -426,10 +426,10 @@ alternating_strip_before_flip = TikZGraph(*alternating_strip_before_flip)
 alternating_strip_before_flip.make_bipartite()
 alternating_strip_before_flip.add_edges(
     [
-        TikZEdge(*edge) for edge in longest_strip
+        TikZEdge(edge) for edge in longest_strip
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZEdge(edge.s, edge.t))) for edge in alternating_strip_before_flip if edge in alternating_strip_before_flip.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_before_flip if edge in alternating_strip_before_flip.two_factor
     ]
 )
 for node in alternating_strip_before_flip.nodes:
@@ -447,10 +447,10 @@ alternating_strip_after_flip.two_factor = alternating_strip_before_flip.two_fact
 alternating_strip_after_flip.make_bipartite()
 alternating_strip_after_flip.add_edges(
     [
-        TikZEdge(*edge) for edge in longest_strip_flipped
+        TikZEdge(edge) for edge in longest_strip_flipped
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZEdge(edge.s, edge.t))) for edge in alternating_strip_after_flip if edge in alternating_strip_after_flip.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_after_flip if edge in alternating_strip_after_flip.two_factor
     ]
 )
 
