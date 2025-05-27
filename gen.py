@@ -21,14 +21,14 @@ def visualize_hamiltonian_cycle(name, graph):
     tgraph.make_bipartite()
     tgraph.two_factor = graph.two_factor
     shade_two_factor(tgraph)
-    tfc = EdgeSet(*graph.two_factor.as_cycle_facing_inwards()).nodes
+    tfc = Graph(*graph.two_factor.as_cycle_facing_inwards()).nodes
     while set(tfc) != set(graph.nodes) and len(tfc) != 0:
         strip = graph.static_alternating_strip()
         tgraph.add_edges([TikZEdge(edge) for edge in strip])
         tgraph.add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in tgraph if not tgraph.two_factor.test_interior(edge.midpoint()) and edge not in tgraph.two_factor])
         tgraph.write(f'{name}{i}')
         graph.edge_flip(strip)
-        tfc = EdgeSet(*graph.two_factor.as_cycle_facing_inwards()).nodes
+        tfc = Graph(*graph.two_factor.as_cycle_facing_inwards()).nodes
         tgraph = TikZGraph(*list(graph))
         tgraph.make_bipartite()
         tgraph.two_factor = graph.two_factor
@@ -38,33 +38,46 @@ def visualize_hamiltonian_cycle(name, graph):
 
 # visualize_hamiltonian_cycle('uot', sgg)
 
-strategy = SolidGridGraph.get_strategy()
-tikz_strategy = TikZGraph()
-for node in strategy.nodes:
-    tikz_strategy[TikZNode(*node), assign]
+strategy = SolidGridGraph()
+for r in range(3):
+    for c in range(3):
+        strategy[(r, c), assign]
+
+for edge in list(SGG_iterator(strategy.nodes, 5))[2]:
+    strategy += Edge(*edge)
+
+tikz_strategy = TikZGraph(*strategy)
+
 tikz_strategy.make_bipartite()\
-    .add_edges(TikZEdge.DIRECTED(edge) for edge in strategy.keys())\
+    .add_edges(TikZEdge.DIRECTED(edge) for edge in tikz_strategy)\
     .write("strategy")
 
 i = 0
 # for graph in solid_grid_graph_iterator(4, 4, minimum=12):
 for graph in [
-    SolidGridGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((3, 1), (4, 1)), ((4, 1), (5, 1)), ((5, 1), (5, 0)), ((5, 0), (5, -1)), ((5, -1), (6, -1)), ((6, -1), (7, -1)), ((7, -1), (7, -2)), ((7, -2), (7, -3)), ((7, -3), (8, -3)), ((8, -3), (9, -3)), ((9, -3), (9, -4)), ((9, -4), (9, -5)), ((9, -5), (8, -5)), ((8, -5), (8, -6)), ((8, -6), (7, -6)), ((7, -6), (6, -6)), ((6, -6), (6, -5)), ((6, -5), (6, -4)), ((6, -4), (5, -4)), ((5, -4), (4, -4)), ((4, -4), (4, -3)), ((4, -3), (4, -2)), ((4, -2), (3, -2)), ((3, -2), (2, -2)), ((2, -2), (2, -1)), ((2, -1), (2, 0)), ((1, 0), (2, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 2)), ((2, 1), (3, 1)), ((2, 2), (3, 2)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((3, 1), (3, 0)), ((3, 0), (3, -1)), ((2, -1), (3, -1)), ((3, 0), (4, 0)), ((4, 0), (4, 1)), ((4, 0), (4, -1)), ((3, -1), (4, -1)), ((3, -1), (3, -2)), ((4, -1), (4, -2)), ((4, -1), (5, -1)), ((4, 0), (5, 0)), ((4, -2), (5, -2)), ((5, -1), (5, -2)), ((5, -2), (6, -2)), ((6, -1), (6, -2)), ((6, -2), (7, -2)), ((6, -2), (6, -3)), ((5, -3), (6, -3)), ((5, -2), (5, -3)), ((4, -3), (5, -3)), ((5, -3), (5, -4)), ((6, -3), (7, -3)), ((6, -3), (6, -4)), ((6, -4), (7, -4)), ((7, -3), (7, -4)), ((7, -4), (8, -4)), ((8, -4), (8, -3)), ((8, -4), (9, -4)), ((8, -4), (8, -5)), ((7, -5), (8, -5)), ((7, -4), (7, -5)), ((6, -5), (7, -5)), ((7, -5), (7, -6))),
-    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((0, 3), (0, 2)), ((0, 3), (1, 3)), ((1, 3), (1, 2)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2))),
-    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))),
-    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0))),
-    SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))),
-    SolidGridGraph(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 1), (2, 2)), ((2, 2), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (0, 7)), ((0, 7), (1, 7)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (-1, 8)), ((-1, 8), (-2, 8)), ((-2, 8), (-2, 7)), ((-2, 7), (-1, 7)), ((-1, 7), (-1, 6)), ((-1, 6), (-1, 5)), ((-1, 5), (-2, 5)), ((-2, 5), (-3, 5)), ((-3, 5), (-3, 4)), ((-3, 4), (-2, 4)), ((-2, 4), (-2, 3)), ((-2, 3), (-1, 3)), ((-1, 3), (-1, 2)), ((-1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 1), (1, 1)), ((1, 1), (2, 1)), ((1, 1), (1, 0)), ((1, 1), (1, 2)), ((0, 2), (1, 2)), ((0, 3), (0, 2)), ((0, 3), (1, 3)), ((-1, 3), (0, 3)), ((0, 4), (0, 3)), ((0, 4), (1, 4)), ((1, 5), (1, 4)), ((0, 5), (0, 4)), ((-1, 5), (-1, 4)), ((-2, 4), (-1, 4)), ((-1, 4), (-1, 3)), ((-1, 4), (0, 4)), ((-2, 5), (-2, 4)), ((-1, 5), (0, 5)), ((-1, 6), (0, 6)), ((-1, 8), (-1, 7)), ((0, 8), (0, 7)), ((-1, 7), (0, 7)))
+    SolidGridGraph(((6, 6), (6, 7)), ((6, 7), (6, 6)), ((6, 7), (7, 7)), ((7, 7), (6, 7)), ((7, 7), (7, 8)), ((7, 8), (7, 7)), ((7, 8), (8, 8)), ((8, 8), (7, 8)), ((8, 8), (8, 9)), ((8, 9), (8, 8)), ((8, 9), (9, 9)), ((9, 9), (8, 9)), ((9, 9), (9, 8)), ((9, 8), (9, 9)), ((9, 8), (9, 7)), ((9, 7), (9, 8)), ((9, 7), (10, 7)), ((10, 7), (9, 7)), ((10, 7), (11, 7)), ((11, 7), (10, 7)), ((11, 7), (11, 6)), ((11, 6), (11, 7)), ((11, 6), (11, 5)), ((11, 5), (11, 6)), ((11, 5), (12, 5)), ((12, 5), (11, 5)), ((12, 5), (13, 5)), ((13, 5), (12, 5)), ((13, 5), (13, 4)), ((13, 4), (13, 5)), ((13, 4), (13, 3)), ((13, 3), (13, 4)), ((13, 3), (14, 3)), ((14, 3), (13, 3)), ((14, 3), (15, 3)), ((15, 3), (14, 3)), ((15, 3), (15, 2)), ((15, 2), (15, 3)), ((15, 2), (15, 1)), ((15, 1), (15, 2)), ((15, 1), (14, 1)), ((14, 1), (15, 1)), ((14, 1), (14, 0)), ((14, 0), (14, 1)), ((14, 0), (13, 0)), ((13, 0), (14, 0)), ((13, 0), (12, 0)), ((12, 0), (13, 0)), ((12, 0), (12, 1)), ((12, 1), (12, 0)), ((12, 1), (12, 2)), ((12, 2), (12, 1)), ((12, 2), (11, 2)), ((11, 2), (12, 2)), ((11, 2), (10, 2)), ((10, 2), (11, 2)), ((10, 2), (10, 3)), ((10, 3), (10, 2)), ((10, 3), (10, 4)), ((10, 4), (10, 3)), ((10, 4), (9, 4)), ((9, 4), (10, 4)), ((9, 4), (8, 4)), ((8, 4), (9, 4)), ((8, 4), (8, 5)), ((8, 5), (8, 4)), ((8, 5), (8, 6)), ((8, 6), (8, 5)), ((7, 6), (8, 6)), ((8, 6), (7, 6)), ((6, 6), (7, 6)), ((7, 6), (6, 6)), ((7, 7), (7, 6)), ((7, 6), (7, 7)), ((7, 7), (8, 7)), ((8, 7), (7, 7)), ((8, 7), (8, 8)), ((8, 8), (8, 7)), ((8, 7), (9, 7)), ((9, 7), (8, 7)), ((8, 8), (9, 8)), ((9, 8), (8, 8)), ((8, 7), (8, 6)), ((8, 6), (8, 7)), ((8, 6), (9, 6)), ((9, 6), (8, 6)), ((9, 7), (9, 6)), ((9, 6), (9, 7)), ((9, 6), (9, 5)), ((9, 5), (9, 6)), ((8, 5), (9, 5)), ((9, 5), (8, 5)), ((9, 6), (10, 6)), ((10, 6), (9, 6)), ((10, 6), (10, 7)), ((10, 7), (10, 6)), ((10, 6), (10, 5)), ((10, 5), (10, 6)), ((9, 5), (10, 5)), ((10, 5), (9, 5)), ((9, 5), (9, 4)), ((9, 4), (9, 5)), ((10, 5), (10, 4)), ((10, 4), (10, 5)), ((10, 5), (11, 5)), ((11, 5), (10, 5)), ((10, 6), (11, 6)), ((11, 6), (10, 6)), ((11, 5), (11, 4)), ((11, 4), (11, 5)), ((12, 5), (12, 4)), ((12, 4), (12, 5)), ((12, 4), (12, 3)), ((12, 3), (12, 4)), ((11, 3), (12, 3)), ((12, 3), (11, 3)), ((11, 4), (11, 3)), ((11, 3), (11, 4)), ((10, 3), (11, 3)), ((11, 3), (10, 3)), ((11, 3), (11, 2)), ((11, 2), (11, 3)), ((12, 3), (13, 3)), ((13, 3), (12, 3)), ((12, 3), (12, 2)), ((12, 2), (12, 3)), ((12, 2), (13, 2)), ((13, 2), (12, 2)), ((13, 3), (13, 2)), ((13, 2), (13, 3)), ((13, 2), (14, 2)), ((14, 2), (13, 2)), ((14, 2), (14, 3)), ((14, 3), (14, 2)), ((14, 2), (15, 2)), ((15, 2), (14, 2)), ((14, 2), (14, 1)), ((14, 1), (14, 2)), ((13, 1), (14, 1)), ((14, 1), (13, 1)), ((13, 2), (13, 1)), ((13, 1), (13, 2)), ((12, 1), (13, 1)), ((13, 1), (12, 1)), ((13, 1), (13, 0)), ((13, 0), (13, 1)), ((13, 4), (12, 4)), ((12, 4), (13, 4)), ((10, 4), (11, 4)), ((11, 4), (10, 4)), ((11, 4), (12, 4)), ((12, 4), (11, 4))),
+    # SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((0, 3), (0, 2)), ((0, 3), (1, 3)), ((1, 3), (1, 2)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2))),
+    # SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))),
+    # SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0))),
+    # SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))),
+    # SolidGridGraph(((3, 3), (4, 3)), ((4, 3), (3, 3)), ((4, 3), (5, 3)), ((5, 3), (4, 3)), ((5, 3), (5, 4)), ((5, 4), (5, 3)), ((5, 4), (5, 5)), ((5, 5), (5, 4)), ((5, 5), (4, 5)), ((4, 5), (5, 5)), ((4, 5), (4, 6)), ((4, 6), (4, 5)), ((4, 6), (4, 7)), ((4, 7), (4, 6)), ((4, 7), (5, 7)), ((5, 7), (4, 7)), ((5, 7), (5, 8)), ((5, 8), (5, 7)), ((5, 8), (4, 8)), ((4, 8), (5, 8)), ((4, 8), (3, 8)), ((3, 8), (4, 8)), ((3, 8), (3, 9)), ((3, 9), (3, 8)), ((3, 9), (3, 10)), ((3, 10), (3, 9)), ((3, 10), (4, 10)), ((4, 10), (3, 10)), ((4, 10), (4, 11)), ((4, 11), (4, 10)), ((4, 11), (3, 11)), ((3, 11), (4, 11)), ((3, 11), (2, 11)), ((2, 11), (3, 11)), ((2, 11), (1, 11)), ((1, 11), (2, 11)), ((1, 11), (1, 10)), ((1, 10), (1, 11)), ((1, 10), (2, 10)), ((2, 10), (1, 10)), ((2, 10), (2, 9)), ((2, 9), (2, 10)), ((2, 9), (2, 8)), ((2, 8), (2, 9)), ((2, 8), (1, 8)), ((1, 8), (2, 8)), ((1, 8), (0, 8)), ((0, 8), (1, 8)), ((0, 8), (0, 7)), ((0, 7), (0, 8)), ((0, 7), (1, 7)), ((1, 7), (0, 7)), ((1, 7), (1, 6)), ((1, 6), (1, 7)), ((1, 6), (2, 6)), ((2, 6), (1, 6)), ((2, 6), (2, 5)), ((2, 5), (2, 6)), ((2, 5), (3, 5)), ((3, 5), (2, 5)), ((3, 5), (3, 4)), ((3, 4), (3, 5)), ((3, 4), (3, 3)), ((3, 3), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (3, 4)), ((4, 4), (5, 4)), ((5, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 4)), ((4, 4), (4, 5)), ((4, 5), (4, 4)), ((3, 5), (4, 5)), ((4, 5), (3, 5)), ((3, 6), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (4, 6)), ((4, 6), (3, 6)), ((2, 6), (3, 6)), ((3, 6), (2, 6)), ((3, 7), (3, 6)), ((3, 6), (3, 7)), ((3, 7), (4, 7)), ((4, 7), (3, 7)), ((4, 8), (4, 7)), ((4, 7), (4, 8)), ((3, 8), (3, 7)), ((3, 7), (3, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 8)), ((1, 7), (2, 7)), ((2, 7), (1, 7)), ((2, 7), (3, 7)), ((3, 7), (2, 7)), ((2, 8), (3, 8)), ((3, 8), (2, 8)), ((2, 9), (3, 9)), ((3, 9), (2, 9)), ((3, 11), (3, 10)), ((3, 10), (3, 11)), ((2, 10), (3, 10)), ((3, 10), (2, 10)), ((2, 11), (2, 10)), ((2, 10), (2, 11)), ((1, 8), (1, 7)), ((1, 7), (1, 8)), ((2, 6), (2, 7)), ((2, 7), (2, 6)))
 ]:
     uot = graph.union_of_tours()
+    # print(uot.is_tour())
+    # exit()
+    # for node in uot.nodes:
+    uot = uot.kernel_patch(next(iter(uot.nodes))+Node(1, 1))
     TikZGraph(*list(graph)).make_bipartite()\
-        .add_edges([TikZEdge.DIRECTED(Edge(*edge, d=True)) for edge in uot])\
-        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph])\
-        .add_edges([TikZOptions.BLUE(edge) for edge in graph.unfurl_uot(uot)])\
+        .add_edges([TikZEdge.DIRECTED(edge) for edge in uot])\
         .write(f'uot{i}')
+    # uot = graph.union_of_tours()
+    # graph = TikZGraph(*list(graph)).make_bipartite()\
+    #     .add_edges([TikZEdge.DIRECTED(edge) for edge in uot])\
+    #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+    #     .add_edges([TikZOptions.BLUE(edge) for edge in graph.unfurl_uot(uot)])\
+    #     .write(f'uot{i}')
     i+=1
     del uot
-
 # exit()
 
 cat_image = plt.imread('cat.png')
@@ -125,7 +138,7 @@ trail_graph.add_edges(
         TikZEdge.DIRECTED(TikZEdge.SHORT(((0, 1), (1, 1))))
     ],
     [
-        TikZEdge.DIRECTED(TikZEdge(*edge)) for edge in TikZGraph.vertex_sequence_to_edges([(0, 1), (1, 1), (1, 2), (0, 2), (0, 1), (0, 0), (1, 0)])
+        TikZEdge.DIRECTED(edge) for edge in TikZGraph.vertex_sequence_to_edges([(0, 1), (1, 1), (1, 2), (0, 2), (0, 1), (0, 0), (1, 0)])
     ]
 )
 trail_graph.write('trail')
@@ -140,79 +153,77 @@ del trail_graph
 # walk_graph.make_bipartite = lambda: ([], walk_graph.nodes, walk_graph.nodes)
 # write_tex('walk', walk_graph, styles=[(['black', '->'], lambda _ : list(walk_graph.src_sink_paths((0, 0), (0, 2) ))[3]), (['black!30'], getEdges)])
 
-path_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
+path_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
 path_graph.add_edges(
     [
-        TikZEdge.DIRECTED(TikZEdge(*edge)) for edge in list(path_graph.src_sink_paths((0, 0), (0, 2)))[3]
+        TikZEdge.DIRECTED(edge) for edge in [((1, 0), (1, 1)), ((1, 1), (0, 1)), ((0, 1), (0, 2))]
     ],
     # [
     #     TikZEdge.GRAY(edge) for edge in path_graph
     # ]
 )
-path_graph.nodes[(1, 0)].draw['draw'] = 'none'
-path_graph.nodes[(1, 0)].style['draw'] = 'none'
 path_graph.write('path')
 del path_graph
 
 # first example of a bipartite graph
-solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)))
+solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
 solid_grid_graph.make_bipartite()
 solid_grid_graph.add_edges(
     [
-        TikZEdge(*edge) for edge in solid_grid_graph
+        TikZEdge(edge) for edge in solid_grid_graph.remove_directed()
     ]
 )
 solid_grid_graph.write('solid')
 del solid_grid_graph
 
-grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)))
+grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
 grid_graph.make_bipartite()
 grid_graph.add_edges(
     [
-        TikZEdge(*edge) for edge in grid_graph
+        TikZEdge(edge) for edge in grid_graph.remove_directed()
     ]
 )
 grid_graph.write('grid')
 del grid_graph
 
 # first example of a Hamiltonian path & Hamiltonian cycle
-hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
+hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
 hamiltonian_graph.make_bipartite()
 hamiltonian_graph.add_edges(
     [
-        TikZEdge.DIRECTED(TikZEdge(*edge)) for edge in hamiltonian_graph.hamiltonian_paths((1, 0))[-2]
+        TikZEdge.DIRECTED(edge) for edge in list(hamiltonian_graph.hamiltonian_paths((1, 0)))[-2]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(TikZEdge(*edge))) for edge in hamiltonian_graph.keys()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in hamiltonian_graph.remove_directed()
     ]
 )
 hamiltonian_graph.write('hamiltonian_path')
 
 hamiltonian_graph.edgesets[0] = [
-    TikZEdge(*edge) for edge in hamiltonian_graph.hamiltonian_cycles()[0]
+    TikZEdge(edge) for edge in next(hamiltonian_graph.hamiltonian_cycles())
 ]
 hamiltonian_graph.write('hamiltonian_cycle')
 del hamiltonian_graph
 
 # first example of the TST
-travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0)))
+travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0))).undirected()
 travelling_salesman_tour_graph.make_bipartite()
 travelling_salesman_tour_graph.add_edges(
     [
-        TikZEdge(*edge, d=True) for edge in travelling_salesman_tour_graph.travelling_salesman_tours()[0]
+        TikZEdge(edge) for edge in next(SolidGridGraph(*travelling_salesman_tour_graph).travelling_salesman_tours())
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph.remove_directed()
     ]
 )
 travelling_salesman_tour_graph.write('travelling_salesman_tour')
 
 # one_factor.tex
-one_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)))
+one_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
 one_factor_graph.make_bipartite()
 one_factor_graph.add_edges(
     [
-        TikZEdge(*edge) for edge in [((0, 2), (1, 2)), ((2, 0), (3, 0)), ((2, 2), (2, 1)), ((3, 2), (3, 1)), ((0, 1), (0, 0)), ((1, 1), (1, 0))]
+        TikZEdge(edge) for edge in [((0, 2), (1, 2)), ((2, 0), (3, 0)), ((2, 2), (2, 1)), ((3, 2), (3, 1)), ((0, 1), (0, 0)), ((1, 1), (1, 0))]
     ]
 )
 one_factor_graph.write('one_factor')
@@ -229,22 +240,22 @@ no_one_factor_graph.write('no_one_factor')
 del no_one_factor_graph
 
 # two_factor.tex
-two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0)))
+two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
 two_factor_graph.make_bipartite()
 two_factor_graph.add_edges(
     [
-        TikZEdge(*edge) for edge in [((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((2, 2), (2, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((2, 2), (3, 2))]
+        TikZEdge(edge) for edge in [((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((2, 2), (2, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((2, 2), (3, 2))]
     ]
 )
 two_factor_graph.write('two_factor')
 del two_factor_graph
 
 # no_two_factor.tex
-no_two_factor_graph = TikZGraph(*list(travelling_salesman_tour_graph.keys()))
+no_two_factor_graph = TikZGraph(*list(travelling_salesman_tour_graph.keys())).undirected()
 no_two_factor_graph.make_bipartite()
 no_two_factor_graph.add_edges(
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_two_factor_graph
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_two_factor_graph.remove_directed()
     ]
 )
 no_two_factor_graph.write('no_two_factor')
@@ -270,19 +281,20 @@ else:
     big_tf = pickle.load(open('big_two_factor.graph', 'rb'))
     for edge in big_tf['edges']:
         big_two_factor_graph[Edge(Node(edge[0][0], edge[0][1]), Node(edge[1][0], edge[1][1])), assign]
-    big_two_factor_graph.two_factor = EdgeSet(*big_tf['twof'])
+    big_two_factor_graph.two_factor = Graph(*big_tf['twof'])
 
+big_two_factor_graph = big_two_factor_graph.undirected()
 
 strips = big_two_factor_graph.get_alternating_strips()
 static = big_two_factor_graph.static_alternating_strip()
 
 shaded = shade_two_factor(big_two_factor_graph)
-big_two_factor_graph = TikZGraph(*list(big_two_factor_graph))
+big_two_factor_graph = TikZGraph(*list(big_two_factor_graph)).undirected()
 big_two_factor_graph.add_background(*shaded)
 
 big_two_factor_graph.add_edges(
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor.remove_directed()
     ]
 )
 
@@ -301,17 +313,17 @@ y1 = (1, 2)
 y2 = (1, 1)
 y3 = (1, 0)
 
-cubic_graph = TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3))
+cubic_graph = TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3)).undirected()
 cubic_graph.make_bipartite()
 cubic_graph.add_edges(
-    [TikZOptions.COLOR('red', edge) for edge in cubic_graph if edge.s == x2]
+    [TikZOptions.COLOR('red', edge) for edge in cubic_graph.remove_directed() if edge.s == x2]
 )
 
 cubic_graph.add_edges(
-    [TikZOptions.COLOR('blue', edge) for edge in cubic_graph if edge.s == x3]
+    [TikZOptions.COLOR('blue', edge) for edge in cubic_graph.remove_directed() if edge.s == x3]
 )
 
-cubic_graph.add_edges(list(cubic_graph))
+cubic_graph.add_edges(list(cubic_graph.undirected()))
 
 cubic_graph.write('cubic_graph')
 del cubic_graph
@@ -334,14 +346,14 @@ cubic_embedding.write('cubic_embedding')
 del cubic_embedding
 
 # type_3_before_flip.tex
-type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0)))
+type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
 type_3_before_flip.make_bipartite()
 type_3_before_flip.add_edges(
     [
         TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip.remove_directed()
     ]
 )
 type_3_before_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(1.1, 1);", "\\fill[fill=black!10] (2, 0) rectangle ++(1.1, 1);")
@@ -349,14 +361,14 @@ type_3_before_flip.add_background("\\draw node at (1.5, 0.5) {\\textbf{III}};")
 type_3_before_flip.write('type_3_before_flip')
 del type_3_before_flip
 
-type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0)))
+type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
 type_3_after_flip.make_bipartite()
 type_3_after_flip.add_edges(
     [
         TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip.remove_directed()
     ]
 )
 type_3_after_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(3.1, 1);")
@@ -415,21 +427,20 @@ del general_even_alternating_strip
 
 alternating_strip_before_flip = SolidGridGraph(((1, 0), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((2, 2), (2, 1)), ((1, 4), (1, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 6), (1, 5)), ((1, 5), (2, 5)), ((2, 6), (2, 5)), ((1, 7), (2, 7)), ((0, 0), (1, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 4), (0, 4)), ((0, 4), (0, 5)), ((0, 5), (0, 6)), ((0, 6), (1, 6)), ((2, 6), (3, 6)), ((3, 6), (3, 5)), ((3, 5), (3, 4)), ((3, 4), (2, 4)), ((1, 7), (1, 8)), ((1, 8), (0, 8)), ((0, 8), (0, 9)), ((0, 9), (1, 9)), ((1, 9), (2, 9)), ((2, 9), (3, 9)), ((3, 9), (3, 8)), ((3, 8), (2, 8)), ((2, 8), (2, 7)), ((2, 7), (2, 6)), ((2, 6), (1, 6)), ((1, 6), (1, 7)), ((0, 5), (1, 5)), ((1, 5), (1, 4)), ((1, 4), (2, 4)), ((2, 5), (2, 4)), ((2, 5), (3, 5)), ((1, 8), (2, 8)), ((1, 9), (1, 8)), ((2, 9), (2, 8)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((2, 0), (2, 1)), ((2, 1), (3, 1)))
 
-alternating_strip_before_flip.two_factor = EdgeSet(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7)))
-
+alternating_strip_before_flip.two_factor = SolidGridGraph(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((1, 3), (2, 3)), ((2, 3), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (3, 5)), ((3, 5), (3, 6)), ((3, 6), (2, 6)), ((2, 6), (2, 5)), ((2, 5), (1, 5)), ((1, 5), (1, 6)), ((0, 6), (1, 6)), ((0, 6), (0, 5)), ((0, 5), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 7), (2, 7)), ((2, 7), (2, 8)), ((2, 8), (3, 8)), ((3, 8), (3, 9)), ((3, 9), (2, 9)), ((2, 9), (1, 9)), ((1, 9), (0, 9)), ((0, 9), (0, 8)), ((0, 8), (1, 8)), ((1, 8), (1, 7)))
 
 longest_strip = max(SolidGridGraph.get_alternating_strips(alternating_strip_before_flip), key=len)
-alternating_strip_after_flip = alternating_strip_before_flip.edge_flip(longest_strip)
+alternating_strip_after_flip = alternating_strip_before_flip.copy().edge_flip(longest_strip)
 
 shaded = list(shade_two_factor(alternating_strip_before_flip))
 alternating_strip_before_flip = TikZGraph(*alternating_strip_before_flip)
 alternating_strip_before_flip.make_bipartite()
 alternating_strip_before_flip.add_edges(
     [
-        TikZEdge(edge) for edge in longest_strip
+        TikZEdge(edge) for edge in longest_strip.remove_directed()
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_before_flip if edge in alternating_strip_before_flip.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_before_flip.two_factor.remove_directed()
     ]
 )
 for node in alternating_strip_before_flip.nodes:
@@ -447,10 +458,10 @@ alternating_strip_after_flip.two_factor = alternating_strip_before_flip.two_fact
 alternating_strip_after_flip.make_bipartite()
 alternating_strip_after_flip.add_edges(
     [
-        TikZEdge(edge) for edge in longest_strip_flipped
+        TikZEdge(edge) for edge in longest_strip_flipped.remove_directed()
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_after_flip if edge in alternating_strip_after_flip.two_factor
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_after_flip.two_factor.remove_directed()
     ]
 )
 

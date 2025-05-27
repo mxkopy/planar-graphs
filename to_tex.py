@@ -551,16 +551,14 @@ class Parser:
 # CURRENTLY
 # step 1. compile 
 
-p = Parser()
-import os
-print(os.getcwd())
-file = open('tzsl.test', 'r')
-root = p.ast(str(file.read()))
-print(root)
-root.eval()
-file.close()
-
-
+# p = Parser()
+# import os
+# print(os.getcwd())
+# file = open('tzsl.test', 'r')
+# root = p.ast(str(file.read()))
+# print(root)
+# root.eval()
+# file.close()
 
 
 
@@ -614,10 +612,17 @@ class TikZNode(Node):
     })
 
     def __new__(cls, *args, label='', style={}):
-        node = super().__new__(cls, *args)
-        node.style = TikZOptions({**TikZNode.style, **style})
-        node.label = label
-        return node
+        if isinstance(args[0], Node):
+            node = TikZNode(*args[0])
+            diff_update_dict(node.__dict__, args[0].__dict__)
+            node.style = TikZOptions({**TikZNode.style, **style})
+            node.label = label
+            return node
+        else:
+            node = super().__new__(cls, *args)
+            node.style = TikZOptions({**TikZNode.style, **style})
+            node.label = label
+            return node
 
     def str(self):
         return f"\draw[{self.draw.str()}] node[{self.style.str()}] at {str(self)} {{{self.label}}};"
@@ -638,25 +643,7 @@ class TikZEdge(Edge):
 
     SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(edge))
 
-    # DOTTED = lambda edge: TikZOptions.style('dash pattern', f"on 10 off 10", TikZEdge(*edge))
     DOTTED = lambda edge: TikZOptions.style('dotted', None, TikZEdge(edge))
-
-
-    # SHORT = lambda edge: TikZEdge(
-    #     *edge,
-    #     style={
-    #         **edge.style,
-    #         'shorten <': '8'
-    #     }
-    # )
-
-    # DOTTED = lambda edge: TikZEdge(
-    #     *edge,
-    #     style={
-    #         **edge.style,
-    #         'dotted': None
-    #     }
-    # )
 
     draw = TikZOptions({
         'line width': '2pt'
@@ -669,6 +656,7 @@ class TikZEdge(Edge):
     def __init__(self, *args, **kwargs):
         if isinstance(args[0], Edge):
             edge = args[0]
+            diff_update_dict(edge.__dict__, args[0].__dict__)
         elif len(args) == 1:
             edge = Edge(*args[0])
         else:
@@ -678,9 +666,9 @@ class TikZEdge(Edge):
         if isinstance(edge, TikZEdge):
             self.style |= edge.style
             self.draw |= edge.draw
-        s = edge.s if isinstance(edge.s, TikZNode) else TikZNode(*edge.s)
-        t = edge.t if isinstance(edge.t, TikZNode) else TikZNode(*edge.t)
-        super().__init__(s, t, d=edge.d)
+        s = TikZNode(edge.s) if isinstance(edge.s, Node) else TikZNode(*edge.s)
+        t = TikZNode(edge.t) if isinstance(edge.t, Node) else TikZNode(*edge.t)
+        super().__init__(s, t)
 
     def str(self):
         return f"\draw[{self.draw.str()}] {str(self.s)} edge[{self.style.str()}] {str(self.t)};"
@@ -691,15 +679,17 @@ class TikZEdge(Edge):
         edge.draw = self.draw.copy()
         return edge
 
+# @opunpack
 class TikZGraph(Graph):
     
     def make_bipartite(self):
         super().make_bipartite()
         for edge in self:
-            if edge.s.color == 1:
-                edge.s.style['fill'] = 'white'
-            if edge.t.color == 1:
-                edge.t.style['fill'] = 'white'
+            # print(id(self.nodes[edge.s]) in [id(node) for node in self.nodes])
+            if self[edge.s].color == 1:
+                self[edge.s].style['fill'] = 'white'
+            if self[edge.t].color == 1:
+                self[edge.t].style['fill'] = 'white'
         return self
 
     def __init__(self, *edges):
@@ -717,24 +707,26 @@ class TikZGraph(Graph):
 
     def add_background(self, *args):
         self.background += args
+        return self
 
     def add_foreground(self, *args):
         self.foreground += args
+        return self
 
     def tikz_paths(self, exclude_previous=True):
         paths = []
         previous_edges = set()
         for edges in self.edgesets:
             for edge in edges:
-                if edge.d and edge.switch() in edges:
+                if edge.switch() in edges:
                     edge.draw['line width'] = '1.75pt'
                     edge.style['out'] = edge.axis() + TikZEdge.ARROW_ANGLE
                     edge.style['in'] = edge.switch().axis() - TikZEdge.ARROW_ANGLE
                 if edge not in previous_edges or not exclude_previous:
                     paths.append(edge.str())
             for edge in edges:
-                edge.d = False
                 previous_edges.add(edge)
+                previous_edges.add(edge.switch())
         for node in self.nodes:
             paths.append(node.str())
         return paths
@@ -747,3 +739,4 @@ class TikZGraph(Graph):
         file.write(self.str())
         file.close()
         print(f"wrote {name}")
+        return self
