@@ -653,7 +653,7 @@ class TikZEdge(Edge):
         'color': 'black',
     })
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, force=False, **kwargs):
         if isinstance(args[0], Edge):
             edge = args[0]
             diff_update_dict(edge.__dict__, args[0].__dict__)
@@ -668,6 +668,7 @@ class TikZEdge(Edge):
             self.draw |= edge.draw
         s = TikZNode(edge.s) if isinstance(edge.s, Node) else TikZNode(*edge.s)
         t = TikZNode(edge.t) if isinstance(edge.t, Node) else TikZNode(*edge.t)
+        self.force = force
         super().__init__(s, t)
 
     def str(self):
@@ -685,7 +686,6 @@ class TikZGraph(Graph):
     def make_bipartite(self):
         super().make_bipartite()
         for edge in self:
-            # print(id(self.nodes[edge.s]) in [id(node) for node in self.nodes])
             if self[edge.s].color == 1:
                 self[edge.s].style['fill'] = 'white'
             if self[edge.t].color == 1:
@@ -693,15 +693,15 @@ class TikZGraph(Graph):
         return self
 
     def __init__(self, *edges):
-        super().__init__()
-        for edge in edges:
-            self[TikZEdge(edge), assign]
+        super().__init__(*(TikZEdge(edge) for edge in edges))
+        # for edge in edges:
+            # self[TikZEdge(edge), assign]
         self.edgesets = []
         self.background = []
         self.foreground = []
 
     def add_edges(self, *args):
-        for edges in [[TikZEdge(edge) for edge in edges] for edges in args]:
+        for edges in [[TikZEdge(edge) if not isinstance(edge, TikZEdge) else edge for edge in edges] for edges in args]:
             self.edgesets.append(edges)
         return self
 
@@ -713,7 +713,7 @@ class TikZGraph(Graph):
         self.foreground += args
         return self
 
-    def tikz_paths(self, exclude_previous=True):
+    def tikz_paths(self):
         paths = []
         previous_edges = set()
         for edges in self.edgesets:
@@ -722,7 +722,7 @@ class TikZGraph(Graph):
                     edge.draw['line width'] = '1.75pt'
                     edge.style['out'] = edge.axis() + TikZEdge.ARROW_ANGLE
                     edge.style['in'] = edge.switch().axis() - TikZEdge.ARROW_ANGLE
-                if edge not in previous_edges or not exclude_previous:
+                if edge not in previous_edges or edge.force:
                     paths.append(edge.str())
             for edge in edges:
                 previous_edges.add(edge)
