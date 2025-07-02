@@ -1,5 +1,5 @@
 from graph import *
-from to_tex import *
+from to_tex_new import *
 from itertools import product
 import matplotlib.pyplot as plt
 import os, pickle
@@ -38,27 +38,22 @@ def visualize_hamiltonian_cycle(name, graph):
     tgraph.write(f'{name}{i}')
 
 def nb():
-    nine_box = SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0)))
-
-    nine_box = TikZGraph(*nine_box)
-    nine_box.add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nine_box.remove_directed()]
+    graph = SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))).undirected()
+    return TikZGraph(graph).add_edges(
+        [TikZEdge.DEFAULT_GRAY_DOTTED(edge) for edge in graph.remove_directed()]
     )
-    for node in nine_box.nodes:
-        node.style['draw'] = 'none'
-        node.style['fill'] = 'none'
-    return nine_box
 
 continuity = nb()
-continuity += list(TikZGraph(*(SolidGridGraph() + [TikZNode((0.5, 0.5)), TikZNode((1.5, 0.5)), TikZNode((0.5, 1.5)), TikZNode((1.5, 1.5))]).make_solid()).make_bipartite(color={0:'black', 1:'black'}).nodes)
+continuity.add_nodes(
+    TikZNode(node) for node in continuity.graph.dual().interior.nodes
+)
 continuity.add_edges(
     [TikZEdge(edge, force=True) for edge in [((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (2, 0)), ((2, 0), (1, 0)), ((1, 0), (0, 0))]], 
     [TikZEdge(edge, force=True) for edge in [((0.5, 0.5), (1.5, 0.5)), ((1.5, 0.5), (1.5, 1.5)), ((1.5, 1.5), (0.5, 1.5)), ((0.0, 1.5), (0.5, 1.5)), ((0.0, 0.5), (0.5, 0.5))]]
 )
-dual = SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual()
-continuity.add_edges([TikZOptions.COLOR('blue', TikZEdge(edge, force=True)) for edge in dual])
 continuity.write('continuity')
-# exit()
+
+exit()
 
 crossing = nb()
 crossing += [TikZNode((0.5, 0.5)), TikZNode((1.5, 1.5))]
@@ -109,18 +104,6 @@ TikZGraph(*dual_graph)\
         [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_dual_edge(edge) not in dual_graph_bfs.undirected()]
     )\
     .write('dual_graph_bfs_tree_boundary')
-# for node in dual_graph.dual().nodes:
-#     print(node)
-# exit()
-# ext = dual_graph.dual().exterior
-# for node in ext.nodes:
-#     print(node)
-# ext[(1.5, -0.5), assign]
-# d = Edge((1.5, 0.5), (1.5, -0.5))
-# l, r = d.rotate_left(), d.rotate_right()
-# print(l.t, r.t)
-# exit()
-
 
 lc_example_dual_tree = dual_graph.longest_cycle()
 lc_example_dual_tree_boundary = SolidGridGraph.boundary_from_dual_tree(lc_example_dual_tree).undirected()

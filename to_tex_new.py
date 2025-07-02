@@ -561,7 +561,6 @@ class Parser:
 # file.close()
 
 
-
 class TikZStr(str):
     def str(self):
         return self
@@ -596,9 +595,12 @@ class TikZOptions(dict):
     LIGHT = lambda tikz: TikZOptions.INTENSITY(30, tikz)
     VERY_LIGHT = lambda tikz: TikZOptions.INTENSITY(10, tikz)
 
-class TikZNode(Node):
+class TikZNode:
 
-    NONE = lambda node: TikZOptions.style('fill', 'none', TikZOptions.style('draw', 'none', node))
+    NONE = lambda node: TikZOptions.style('fill', 'none', TikZOptions.style('draw', 'none', TikZNode(node)))
+    FORCE = lambda node: TikZNode(node).set_force(True)
+    UNFORCE = lambda node: TikZNode(node).set_force(False)
+    BIPARTITE = lambda node, color={0: 'white', 1:'black'}: TikZOptions.style('color', color[node.color], TikZNode(node))
 
     draw = TikZOptions({
         # 'draw': None
@@ -613,39 +615,52 @@ class TikZNode(Node):
         'scale': 0.5
     })
 
-    def __new__(cls, *args, label='', style={}):
-        if isinstance(args[0], Node):
-            node = TikZNode(*args[0])
-            diff_update_dict(node.__dict__, args[0].__dict__)
-            node.style = TikZOptions({**TikZNode.style, **style})
-            node.label = label
-            return node
+    def __init__(self, node, style={}, draw={}, force=True):
+        if isinstance(node, TikZNode):
+            self.node = node.node
+            self.style = TikZOptions({**node.style, **style})
+            self.draw = TikZOptions({**node.draw, **draw})
+            self.force = node.force and force
         else:
-            node = super().__new__(cls, *args)
-            node.style = TikZOptions({**TikZNode.style, **style})
-            node.label = label
-            return node
+            if not isinstance(node, Node):
+                node = Node(*node)
+            self.node = node
+            self.style = TikZOptions({**TikZNode.style, **style})
+            self.draw = TikZOptions({**TikZNode.draw, **draw})
+            self.force = force
+
+    def set_force(self, force):
+        self.force = force
+        return self
+
+    def __hash__(self):
+        return hash(self.node)
+
+    def __eq__(self, other):
+        if isinstance(other, TikZNode):
+            return self.node == other.node
+        elif isinstance(other, Node):
+            return self.node == other
+        else:
+            raise ValueError(f'Attempted to compare object of type {type(other)} with TikZNode')
 
     def str(self):
-        return f"\draw[{self.draw.str()}] node[{self.style.str()}] at {str(self)} {{{self.label}}};"
+        return f"\draw[{self.draw.str()}] node[{self.style.str()}] at {str(self.node)} {{}};"
     
     def copy(self):
-        node = super().copy()
-        node.style = self.style.copy()
-        node.draw = self.draw.copy()
-        return node
+        return TikZNode(self.node.copy(), self.style.copy(), self.draw.copy())
 
-class TikZEdge(Edge):
+class TikZEdge:
 
     ARROW_ANGLE = 45
-
-    DIRECTED = lambda edge: TikZOptions.style('shorten >', '3', TikZOptions.style('->', None, TikZEdge(edge)))
-    
+    NONE = lambda edge: TikZOptions.style('draw', 'none', edge)
+    FORCE = lambda edge: TikZEdge(edge).set_force(True)
+    UNFORCE = lambda edge: TikZEdge(edge).set_force(False)
     GRAY = lambda edge: TikZOptions.color('gray', TikZEdge(edge))
-
-    SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(edge))
-
     DOTTED = lambda edge: TikZOptions.style('dotted', None, TikZEdge(edge))
+    DEFAULT_GRAY_DOTTED = lambda edge: TikZEdge.UNFORCE(TikZEdge.GRAY(TikZEdge.DOTTED(edge)))
+    DIRECTED = lambda edge: TikZOptions.style('shorten >', '3', TikZOptions.style('->', None, TikZEdge(edge)))
+    SHORT = lambda edge: TikZOptions.style('shorten <', '8', TikZEdge(edge))
 
     draw = TikZOptions({
         'line width': '2pt'
@@ -655,62 +670,107 @@ class TikZEdge(Edge):
         'color': 'black',
     })
     
-    def __init__(self, *args, force=False, **kwargs):
-        if isinstance(args[0], Edge):
-            edge = args[0]
-            diff_update_dict(edge.__dict__, args[0].__dict__)
-        elif len(args) == 1:
-            edge = Edge(*args[0])
-        else:
-            edge = Edge(*args, **kwargs)
-        self.style = TikZEdge.style.copy()
-        self.draw = TikZEdge.draw.copy()
+    def __init__(self, edge, style={}, draw={}, force=True):
         if isinstance(edge, TikZEdge):
-            self.style |= edge.style
-            self.draw |= edge.draw
-        s = TikZNode(edge.s) if isinstance(edge.s, Node) else TikZNode(*edge.s)
-        t = TikZNode(edge.t) if isinstance(edge.t, Node) else TikZNode(*edge.t)
+            self.edge = edge.edge
+            self.style = TikZOptions({**edge.style, **style})
+            self.draw = TikZOptions({**edge.draw, **draw})
+            self.force = edge.force and force
+        else:
+            if not isinstance(edge, Edge):
+                edge = Edge(*edge)
+            self.edge = edge
+            self.style = TikZOptions({**TikZEdge.style, **style})
+            self.draw = TikZOptions({**TikZEdge.draw, **draw})
+            self.force = force
+
+    def set_force(self, force):
         self.force = force
-        super().__init__(s, t)
+        return self
+
+    def __hash__(self):
+        return hash(self.edge)
+
+    def __eq__(self, other):
+        if isinstance(other, TikZEdge):
+            return self.edge == other.edge
+        elif isinstance(other, Edge):
+            return self.edge == other
+        else:
+            raise ValueError(f'Attempted to compare object of type {type(other)} with TikZEdge')
 
     def str(self):
-        return f"\draw[{self.draw.str()}] {str(self.s)} edge[{self.style.str()}] {str(self.t)};"
+        return f"\draw[{self.draw.str()}] {str(self.edge.s)} edge[{self.style.str()}] {str(self.edge.t)};"
     
-    # def copy(self):
-        # edge = super().copy()
-        # edge.style = self.style.copy()
-        # edge.draw = self.draw.copy()
-        # return edge
+    def copy(self):
+        return TikZEdge(self.edge.copy(), self.style.copy(), self.draw.copy(), self.force)
 
 # @opunpack
-class TikZGraph(Graph):
+class TikZGraph:
     
-    def make_bipartite(self, color={0: 'black', 1: 'white'}):
-        super().make_bipartite()
-        for edge in self:
-            self[edge.s].style['fill'] = color[self[edge.s].color]
-            self[edge.t].style['fill'] = color[self[edge.t].color]
-        return self
+    def __init__(self, graph, edgesets=[], nodesets=[], background=[], foreground=[], previous_edges=set(), previous_nodes=set()):
+        super().__init__()
+        if isinstance(graph, TikZGraph):
+            self.graph = graph.graph
+            self.edgesets = graph.edgesets + edgesets
+            self.nodesets = graph.nodesets + nodesets
+            self.background = graph.background + background
+            self.foreground = graph.foreground + foreground
+            self.previous_edges = graph.previous_edges.union(previous_edges)
+            self.previous_nodes = graph.previous_nodes.union(previous_nodes)
 
-    def __init__(self, *edges):
-        super().__init__(*(TikZEdge(edge) for edge in edges))
-        # for edge in edges:
-            # self[TikZEdge(edge), assign]
-        self.edgesets = []
-        self.background = []
-        self.foreground = []
+        else:
+            self.graph = graph
+            self.edgesets = edgesets
+            self.nodesets = nodesets
+            self.background = background
+            self.foreground = foreground
+            self.previous_edges = previous_edges
+            self.previous_nodes = previous_nodes
 
     def copy(self):
-        graph = super().copy()
-        graph.edgesets = self.edgesets
-        graph.background = self.background
-        graph.foreground = self.foreground
-        return graph
+        return TikZGraph(
+            self.graph.copy(), 
+            self.edgesets.copy(), 
+            self.nodesets.copy(), 
+            self.background.copy(), 
+            self.foreground.copy(),
+            self.previous_edges.copy(),
+            self.previous_nodes.copy()
+        )
 
     def add_edges(self, *args):
-        for edges in [[TikZEdge(edge) if not isinstance(edge, TikZEdge) else edge for edge in edges] for edges in args]:
-            self.edgesets.append(edges)
+        for edges in args:
+            edgeset = []
+            for tikz_edge in edges:
+                if tikz_edge.edge.switch() in edges:
+                    tikz_edge.draw['line width'] = '1.75pt'
+                    tikz_edge.style['out'] = tikz_edge.edge.axis() + TikZEdge.ARROW_ANGLE
+                    tikz_edge.style['in'] = tikz_edge.edge.switch().axis() - TikZEdge.ARROW_ANGLE
+                if tikz_edge not in self.previous_edges or tikz_edge.force:
+                    edgeset.append(tikz_edge)
+            for tikz_edge in edges:
+                self.previous_edges.add(tikz_edge.edge)
+                self.previous_edges.add(tikz_edge.edge.switch())
+            self.edgesets.append(edgeset)
         return self
+
+    def add_nodes(self, *args):
+        for nodes in args:
+            nodeset = []
+            for tikz_node in nodes:
+                if tikz_node not in self.previous_nodes or tikz_node.force:
+                    nodeset.append(tikz_node)
+            for tikz_node in nodes:
+                self.previous_nodes.add(tikz_node)
+            self.nodesets.append(nodeset)
+        return self
+
+    # def __iadd__(self, args):
+    #     if not isinstance(args, list):
+    #         raise ValueError(f'Only list currently supported with TikZGraph.__iadd__')
+    #     for set in args:
+
 
     def add_background(self, *args):
         self.background += args
@@ -720,34 +780,14 @@ class TikZGraph(Graph):
         self.foreground += args
         return self
     
-    def on_nodes(self, f):
-        for node in self.nodes:
-            f(node)
-        return self
-
-    def tikz_paths(self):
-        paths = []
-        previous_edges = set()
-        for edges in self.edgesets:
-            for edge in edges:
-                if edge.switch() in edges:
-                    edge.draw['line width'] = '1.75pt'
-                    edge.style['out'] = edge.axis() + TikZEdge.ARROW_ANGLE
-                    edge.style['in'] = edge.switch().axis() - TikZEdge.ARROW_ANGLE
-                if edge not in previous_edges or edge.force:
-                    paths.append(edge.str())
-            for edge in edges:
-                previous_edges.add(edge)
-                previous_edges.add(edge.switch())
-        for node in self.nodes:
-            paths.append(node.str())
-        return paths
-
     def str(self):
-        return f"{chr(92)}begin{{tikzpicture}}{chr(10)}{chr(10).join(self.background+self.tikz_paths()+self.foreground)}{chr(10)}{chr(92)}end{{tikzpicture}}"
+        edge_strs = [edge.str() for edgeset in self.edgesets for edge in edgeset]
+        node_strs = [node.str() for nodeset in self.nodesets for node in nodeset]
+        paths = self.background + edge_strs + node_strs + self.foreground
+        return f"{chr(92)}begin{{tikzpicture}}{chr(10)}{chr(10).join(paths)}{chr(10)}{chr(92)}end{{tikzpicture}}"
     
     def write(self, name):
-        file = open(f'../draft/examples/{name}.tex', 'w')
+        file = open(f'../draft/new_examples/{name}.tex', 'w')
         file.write(self.str())
         file.close()
         print(f"wrote {name}")
