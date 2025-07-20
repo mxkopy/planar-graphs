@@ -37,8 +37,6 @@ def visualize_hamiltonian_cycle(name, graph):
         i += 1
     tgraph.write(f'{name}{i}')
 
-
-
 def uot_test():
     i = 0
     # SolidGridGraph(((0, 2), (0, 1)), ((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 0), (2, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 2), (3, 2)), ((2, 1), (3, 1)), ((3, 2), (3, 1)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 2), (5, 2)), ((5, 2), (5, 1)), ((4, 1), (5, 1)), ((5, 2), (6, 2)), ((5, 1), (6, 1)), ((6, 1), (6, 2)), ((4, 3), (4, 2)), ((4, 3), (5, 3)), ((5, 3), (5, 2)), ((5, 3), (6, 3)), ((6, 3), (6, 2))),
@@ -59,7 +57,7 @@ def uot_test():
         loaddir = 'max_tree_match'
         dual = graph.dual()
 
-        dual_tree = graph.longest_cycle()
+        dual_tree = graph.dual_tree()
 
         graph.match(include=graph - graph.minimum_spanning_tree())
 
@@ -76,28 +74,30 @@ def uot_test():
         GREEN = lambda edge: TikZOptions.COLOR('green', OVERLAY(TikZEdge(edge, force=True), 4))
         ORANGE = lambda edge: TikZOptions.COLOR('orange', OVERLAY(TikZEdge(edge, force=True), 3))
 
-        TikZGraph(*graph, *dual.interior)\
-            .add_edges([TikZEdge(edge, force=True) for edge in graph.dual_tree().remove_directed()])\
-            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
-            .write(f'uot{i}_first')
+        # TikZGraph(*graph, *dual.interior)\
+        #     .add_edges([TikZEdge(edge, force=True) for edge in graph.dual_tree().remove_directed()])\
+        #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+        #     .add_edges([RED(edge) for edge in sum(dual_tree.get_subtour_eliminations().keys(), start=Graph()).undirected().remove_directed()])\
+        #     .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
+        #     .write(f'uot{i}_first')
 
-        TikZGraph(*graph, *dual.interior)\
-            .add_edges([BLUE(edge) for edge in blue.remove_directed()])\
-            .add_edges([RED(edge) for edge in red.remove_directed()])\
-            .add_edges([GREEN(edge) for edge in green.remove_directed()])\
-            .add_edges([ORANGE(edge) for edge in orange.remove_directed()])\
-            .add_edges([TikZEdge(edge, force=True) for edge in black.remove_directed()])\
-            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
-            .write(f'uot{i}')
+        # TikZGraph(*graph, *dual.interior)\
+        #     .add_edges([BLUE(edge) for edge in blue.remove_directed()])\
+        #     .add_edges([RED(edge) for edge in red.remove_directed()])\
+        #     .add_edges([GREEN(edge) for edge in green.remove_directed()])\
+        #     .add_edges([ORANGE(edge) for edge in orange.remove_directed()])\
+        #     .add_edges([TikZEdge(edge, force=True) for edge in black.remove_directed()])\
+        #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+        #     .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
+        #     .write(f'uot{i}')
 
-        nilp = graph.new_ilp()
-        TikZGraph(*graph, *dual.interior)\
-            .add_edges([TikZEdge.DIRECTED(TikZEdge(edge)) for edge in nilp])\
-            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node not in nilp.dual().interior else node)\
-            .write(f'uot_{i}_new')
+        # nilp = graph.new_ilp()
+        # TikZGraph(*graph, *dual.interior)\
+        #     .add_edges([TikZEdge.DIRECTED(TikZEdge(edge)) for edge in nilp])\
+        #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+        #     .add_edges([RED(edge) for edge in sum(nilp.dual().interior.get_subtour_eliminations().keys(), start=Graph()).undirected().remove_directed()])\
+        #     .on_nodes(lambda node: TikZNode.NONE(node) if node not in nilp.dual().interior else node)\
+        #     .write(f'uot_{i}_new')
 
         # exit()
         # TikZGraph(*list(graph)) + TikZGraph(*list(graph.dual()))\
