@@ -52,7 +52,6 @@ continuity.add_edges(
     [TikZEdge(edge, force=True) for edge in [((0.5, 0.5), (1.5, 0.5)), ((1.5, 0.5), (1.5, 1.5)), ((1.5, 1.5), (0.5, 1.5)), ((0.0, 1.5), (0.5, 1.5)), ((0.0, 0.5), (0.5, 0.5))]]
 )
 continuity.write('continuity')
-
 exit()
 
 crossing = nb()
