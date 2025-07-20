@@ -1,5 +1,4 @@
 from graph import *
-import integer_linear_model
 
 #TODO: write a DSL for this stuff 
 # needs:
