@@ -1117,43 +1117,6 @@ class SolidGridGraph(Graph):
                 neighborhood += (at + (r, c))
         return neighborhood.make_solid()
 
-    def dual_tree(self):
-        model = Model(name='dual_tree')
-        dual = {
-            node: {
-                'a': node + (-0.5, -0.5),
-                'b': node + (0.5, -0.5), 
-                'c': node + (0.5, 0.5), 
-                'd': node + (-0.5, 0.5)
-            } for node in self.nodes
-        }
-        count = {}
-        for node in dual.values():
-            for dual_node in node.values():
-                count[dual_node] = 1 if dual_node not in count else count[dual_node] + 1
-        xs = {
-            node: model.binary_var(name=str(node)) for node in count
-        }
-        allowed_four_fulls = self.allowed_four_fulls()
-        for node in xs:
-            if count[node] < 4:
-                model.add_constraint(xs[node] == 0)
-        for node in dual.values():
-            a, b, c, d = node['a'], node['b'], node['c'], node['d']
-            if node not in allowed_four_fulls:
-                model.add_constraint(xs[a] + xs[b] + xs[c] + xs[d] <= 3)
-            model.add_constraint((xs[a] + xs[c]) - (xs[b] + xs[d]) <= 1)
-            model.add_constraint((xs[b] + xs[d]) - (xs[a] + xs[c]) <= 1)
-        model.maximize(sum(xs.values()))
-        model.solve()
-        solution_dual = SolidGridGraph()
-        solution_dual += [node for node in xs if not isinstance(xs[node], int) and model.solution[str(node)] > 0.0]
-        solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
-        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual).undirected()
-        solution.dual().interior = solution_dual
-        setattr(solution, 'model', model)
-        return solution
-
     def allowed_four_fulls(self):
         allowed = []
         for node in self.nodes:
@@ -1169,27 +1132,84 @@ class SolidGridGraph(Graph):
                     allowed.append(node)
         return allowed
 
+    def dual_tree(self):
+        model = Model(name='dual_tree')
+        dual = {
+            node: {
+                'a': node + (-0.5, -0.5),
+                'b': node + (0.5, -0.5), 
+                'c': node + (0.5, 0.5), 
+                'd': node + (-0.5, 0.5)
+            } for node in self.nodes
+        }
+        xs = {
+            node: model.binary_var(name=str(node)) for node in self.dual().nodes
+        }
+        allowed_four_fulls = self.allowed_four_fulls()
+        for node in xs:
+            if node not in self.dual().interior:
+                model.add_constraint(xs[node] == 0)
+        for node in dual.values():
+            a, b, c, d = node['a'], node['b'], node['c'], node['d']
+            if node not in allowed_four_fulls:
+                model.add_constraint(xs[a] + xs[b] + xs[c] + xs[d] <= 3)
+            model.add_constraint((xs[a] + xs[c]) - (xs[b] + xs[d]) <= 1)
+            model.add_constraint((xs[b] + xs[d]) - (xs[a] + xs[c]) <= 1)
+        model.maximize(sum(xs.values()))
+        model.solve()
+        solution_dual = SolidGridGraph()
+        solution_dual += [node for node in xs if not isinstance(xs[node], int) and model.solution[str(node)] > 0.0]
+        # solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
+        # solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).undirected())
+        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).undirected()
+        solution.dual().interior = solution_dual
+        setattr(solution, 'model', model)
+        return solution
+
+    # go each node of each subtour in the dual.
+    # if removing it decreases the size of the largest component by more than 1, 
+    #   it's a 'chokepoint' and we should remove it as a last resort.  
+    # if removing it results in diagonal nodes, we should remove it and its non-diagonal neighbor
+    #   not part of the cycle as a last result. 
     def get_subtour_eliminations(dual):
         eliminated = {}
         def is_colinear(node):
             l, r = tour.neighbors(node)
             return l - node == node - r
+        def is_chokepoint(tour, node):
+            big_component_1 = max((dual-node).components().values(), key=len)
+            big_component_2 = max((dual-eliminated[tour]).components().values(), key=len)
+            return len(big_component_1) < len(big_component_2)
+        def makes_diagonal(node):
+            test_dual = dual - node
+            primals = SolidGridGraph.box(at=node)
+            for primal in primals.nodes:
+                a, b, c, d = primal + (-0.5, -0.5), primal + (0.5, -0.5), primal + (0.5, 0.5), primal + (-0.5, 0.5)
+                if sum(x in test_dual for x in [a, b, c, d]) == 2:
+                    if (a in test_dual and c in test_dual):
+                        return (a, c)
+                    if (b in test_dual and d in test_dual):
+                        return (b, d)
         for tour in dual.get_subtours():
             for node in tour.nodes:
                 if is_colinear(node):
                     if tour not in eliminated:
-                        eliminated[tour] = node
+                        eliminated[tour] = [node]
                     else:
-                        big_component_1 = max((dual-node).components().values(), key=len)
-                        big_component_2 = max((dual-eliminated[tour]).components().values(), key=len)
-                        if len(big_component_1) > len(big_component_2):
-                            eliminated[tour] = node
+                        if not is_chokepoint(tour, node):
+                            diagonal = makes_diagonal(node)
+                            previous_diagonal = makes_diagonal(eliminated[tour][0])
+                            if diagonal is None or previous_diagonal is not None:
+                                eliminated[tour] = [node]
+                            if diagonal is not None:
+                                eliminated[tour] = [eliminated[tour][0], diagonal[0]]
         return eliminated
 
     def eliminate_subtours(dual):
         while len(dual.get_subtours()) > 0:
-            dual -= list(SolidGridGraph.get_subtour_eliminations(dual).values())
-        return max(dual.components().values(), key=len).undirected()
+            dual -= sum(SolidGridGraph.get_subtour_eliminations(dual).values(), start=[])
+        return dual
+        return SolidGridGraph(*max(dual.components().values(), key=len).undirected())
 
     def connect_dual_tree(self, dual_tree):
         components = dual_tree.components()
@@ -1293,10 +1313,231 @@ class SolidGridGraph(Graph):
 
         pre_subtour_elimination = SolidGridGraph(*([] if model.solution is None else (edge for edge in xuv if round(model.solution[str(edge)]) == 1)))
         solution_dual = dual.interior - [node for node in dual.interior.nodes if not pre_subtour_elimination.test_interior(node)]
-        solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
-        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual).undirected()
+        # solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
+        # solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).undirected())
+        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).undirected()
+        solution.dual().interior = solution_dual
         setattr(solution, 'model', model)
         return solution
+
+
+    def combination_ilp(self):
+        model = Model(name='dual_tree')
+
+        # indicators for dual nodes
+        xd = {
+            dual_node: model.binary_var(name=str(dual_node)) for dual_node in self.dual().nodes
+        }
+
+        # indicators for primal edges
+        xuv = {
+            edge: model.binary_var(name=str(edge)) for edge in self.undirected()
+        }
+
+        # indicators for primal nodes proxied on xuv
+        xv = {
+            node: {
+                'incoming': [xuv[edge] for edge in self if edge.t == node],
+                'outgoing': [xuv[edge] for edge in self if edge.s == node]
+            } for node in self.nodes
+        }
+
+        # dual node -> face edges association
+        xf = {
+            dual_node: {
+                'ab': xuv[round(SolidGridGraph.right_edge(direction=(0, -1), at=dual_node))], 
+                'bc': xuv[round(SolidGridGraph.right_edge(direction=(1, 0), at=dual_node))],
+                'cd': xuv[round(SolidGridGraph.right_edge(direction=(0, 1), at=dual_node))],
+                'da': xuv[round(SolidGridGraph.right_edge(direction=(-1, 0), at=dual_node))]
+            } for dual_node in self.dual().interior.nodes
+        }
+
+        # primal node -> 2x2 square association
+        dual = {
+            node: {
+                'a': node + (-0.5, -0.5),
+                'b': node + (0.5, -0.5), 
+                'c': node + (0.5, 0.5), 
+                'd': node + (-0.5, 0.5)
+            } for node in self.nodes
+        }
+
+        # can ignore
+        allowed_four_fulls = self.allowed_four_fulls()
+
+        # exterior dual nodes are not part of the footprint
+        for node in xd:
+            if node not in self.dual().interior:
+                model.add_constraint(xd[node] == 0)
+
+        # 2x2 square constraints
+        for node in dual.values():
+            a, b, c, d = node['a'], node['b'], node['c'], node['d']
+            if node not in allowed_four_fulls:
+                model.add_constraint(xd[a] + xd[b] + xd[c] + xd[d] <= 3)
+            model.add_constraint((xd[a] + xd[c]) - (xd[b] + xd[d]) <= 1)
+            model.add_constraint((xd[b] + xd[d]) - (xd[a] + xd[c]) <= 1)
+
+        # no doubled edge constraint
+        for edge in xuv:
+            model.add_constraint(xuv[edge] + xuv[edge.switch()] <= 1)
+
+        # 2 factor constraint
+        for node in xv:
+            model.add_constraint(sum(xv[node]['incoming']) <= 1)
+            model.add_constraint(sum(xv[node]['outgoing']) <= 1)
+            model.add_constraint(sum(xv[node]['incoming']) == sum(xv[node]['outgoing']))
+
+        # boundary CCW orientation constraint 
+        for (u, v) in dual:
+            if u in self.dual().interior and v in self.dual().exterior:
+                model.add_constraint(xuv[SolidGridGraph.to_dual_edge(Edge(v, u))] == 0)
+
+        for face in xf:
+            # interior face implies at least one oriented edge, except when the interior face has 0 edges
+            # model.add_constraint(4*xd[face] - sum(xd[neighbor] for neighbor in self.dual().interior.neighbors(face)) <= 4*sum(xf[face].values()))
+            model.add_constraint(xd[face] <= sum(xf[face].values()))
+            for edge in xf[face]:
+                # oriented edge implies the face that orients it
+                model.add_constraint(xf[face][edge] <= xd[face])
+
+        for A in xf:
+            for B in self.dual().interior.neighbors(A):
+                # faces can't be neighbors if separated by an oriented edge
+                A_oriented_edge = SolidGridGraph.to_dual_edge(Edge(A, B))
+                model.add_constraint(xuv[A_oriented_edge] + xd[B] <= 1)
+
+        # can ignore
+        xv_allowed_four_full = [sum(xv[v]['incoming']) for v in allowed_four_fulls]
+
+        # n = 2k + 2
+        model.add_constraint(sum(xuv.values()) == 2 * sum(xd.values()) + 2 - (4 * sum(1 - v for v in xv_allowed_four_full)))
+
+        # want as close to 0 as possible
+        model.maximize(
+            sum(xuv.values())
+            -
+            sum(xd.values())
+        )
+        model.solve()
+
+        # visualization gobbledygook
+        solution_dual = SolidGridGraph() + [node for node in xd if model.solution[str(node)] > 0.0]
+        # solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
+        solution = SolidGridGraph() + [edge for edge in xuv if model.solution[str(edge)] > 0.0]
+        # connects all adjacent neighbors in the dual together
+        solution.dual().interior = solution_dual.make_solid()
+        setattr(solution, 'model', model)
+        return solution
+
+
+    def _combination_ilp(self):
+        model = Model(name='dual_tree')
+
+        xd = {
+            dual_node: model.binary_var(name=str(dual_node)) for dual_node in self.dual().nodes
+        }
+
+        xuv = {
+            edge: model.binary_var(name=str(edge)) for edge in self.undirected()
+        }
+
+        xv = {
+            node: {
+                'incoming': [xuv[edge] for edge in self if edge.t == node],
+                'outgoing': [xuv[edge] for edge in self if edge.s == node]
+            } for node in self.nodes
+        }
+
+        xf = {
+            dual_node: {
+                'ab': xuv[round(SolidGridGraph.right_edge(direction=(0, -1), at=dual_node))], 
+                'bc': xuv[round(SolidGridGraph.right_edge(direction=(1, 0), at=dual_node))],
+                'cd': xuv[round(SolidGridGraph.right_edge(direction=(0, 1), at=dual_node))],
+                'da': xuv[round(SolidGridGraph.right_edge(direction=(-1, 0), at=dual_node))]
+            } for dual_node in self.dual().interior.nodes
+        }
+
+        dual = {
+            node: {
+                'a': node + (-0.5, -0.5),
+                'b': node + (0.5, -0.5), 
+                'c': node + (0.5, 0.5), 
+                'd': node + (-0.5, 0.5)
+            } for node in self.nodes
+        }
+
+        allowed_four_fulls = self.allowed_four_fulls()
+
+        for node in xd:
+            if node not in self.dual().interior:
+                model.add_constraint(xd[node] == 0)
+
+        for node in dual.values():
+            a, b, c, d = node['a'], node['b'], node['c'], node['d']
+            if node not in allowed_four_fulls:
+                model.add_constraint(xd[a] + xd[b] + xd[c] + xd[d] <= 3)
+            model.add_constraint((xd[a] + xd[c]) - (xd[b] + xd[d]) <= 1)
+            model.add_constraint((xd[b] + xd[d]) - (xd[a] + xd[c]) <= 1)
+
+        for edge in xuv:
+            model.add_constraint(xuv[edge] + xuv[edge.switch()] <= 1)
+
+        for node in xv:
+            model.add_constraint(sum(xv[node]['incoming']) <= 1)
+            model.add_constraint(sum(xv[node]['outgoing']) <= 1)
+            model.add_constraint(sum(xv[node]['incoming']) == sum(xv[node]['outgoing']))
+
+        for (u, v) in dual:
+            if u in self.dual().interior and v in self.dual().exterior:
+                model.add_constraint(xuv[SolidGridGraph.to_dual_edge(Edge(v, u))] == 0)
+
+        for face in xf:
+            model.add_constraint(4*xd[face] - sum(xd[neighbor] for neighbor in self.dual().interior.neighbors(face)) <= 4*sum(xf[face].values()))
+            for edge in xf[face]:
+                model.add_constraint(xf[face][edge] <= xd[face])
+
+        for A in xf:
+            for B in self.dual().interior.neighbors(A):
+                A_oriented_edge = SolidGridGraph.to_dual_edge(Edge(A, B))
+                model.add_constraint(xuv[A_oriented_edge] + xd[B] <= 1)
+
+        xv_allowed_four_full = [sum(xv[v]['incoming']) + sum(xv[v]['outgoing']) for v in allowed_four_fulls]
+        model.add_constraint(sum(xuv.values()) == 2 * sum(xd.values()) + 2 - (4 * sum(1 - v for v in xv_allowed_four_full)))
+
+        model.maximize(
+            sum(xd.values())
+            +
+            sum(xuv.values())
+        )
+        model.solve()
+        solution_dual = SolidGridGraph() + [node for node in xd if not isinstance(xd[node], int) and model.solution[str(node)] > 0.0]
+        # solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
+        solution = SolidGridGraph() + [edge for edge in xuv if model.solution[str(edge)] > 0.0]
+        solution.dual().interior = solution_dual.make_solid()
+        setattr(solution, 'model', model)
+        return solution
+
+    def components_shortest_paths(self, components):
+        return {
+            A: {
+                B: min((self.dual().interior.shortest_path(a, b)[1:-1] for a in A.nodes for b in B.nodes), key=len) for B in components if B != A    
+            } for A in components
+        }
+
+    def fix_combo(self, combo):
+        no_tours = SolidGridGraph.eliminate_subtours(combo.dual().interior)
+        components = no_tours.components()
+        while len(components) > 1:
+            shortest_paths = self.components_shortest_paths(components.values())
+            no_tours += min((shortest_paths[A][B] for A in shortest_paths for B in shortest_paths[A]), key=len)
+            no_tours = no_tours.make_solid()
+            components = no_tours.components()
+        combo = SolidGridGraph.boundary_from_dual_tree(no_tours.make_solid())
+        combo.dual().interior = no_tours.make_solid()
+        return combo
+        # free_nodes = len(combo.nodes) - len(no_tours.nodes)
+
 
     def make_alternating_cycle(start, end):
         def start_face(step, node):

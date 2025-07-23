@@ -22,8 +22,32 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS graphs(
                );''')
 
 for n in range(10, 1000):
+    sgg = SolidGridGraph.random_thick_solid_grid_graph(n=n)
     cursor.execute(f"SELECT data FROM graphs WHERE id = ?", (n,))
-    if cursor.fetchone() is None:
+    data = cursor.fetchone()
+
+    if data is not None:
+        sgg = SolidGridGraph().decompress(data[0])
+        dtree, new = sgg.dual_tree(), sgg.new_ilp()
+        dtree_dt, new_dt = dtree.model.solve_details.dettime, new.model.solve_details.dettime
+        cursor.execute('''UPDATE graphs 
+                       SET dtree = ?, new = ?, dtree_dt = ?, new_dt = ?, dtree_len = ?, new_len = ?
+                       WHERE id = ?
+                       ''',
+                       (
+                            dtree.compress(), 
+                            new.compress(), 
+                            dtree_dt, 
+                            new_dt, 
+                            len(dtree),
+                            len(new),
+                            n
+                        )
+        )
+        print(f'{n} dtree_dt: {dtree_dt} new_dt: {new_dt} dtree_len: {len(dtree)} new_len: {len(new)}\n')
+        conn.commit()
+
+    if data is None:
         sgg = SolidGridGraph.random_thick_solid_grid_graph(n=n)
         dtree, new = sgg.dual_tree(), sgg.new_ilp()
         dtree_dt, new_dt = dtree.model.solve_details.dettime, new.model.solve_details.dettime
