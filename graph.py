@@ -1321,6 +1321,8 @@ class SolidGridGraph(Graph):
         return solution
 
 
+    # combination of the old 2x2 square ILP and Jim Fix's new oriented tour ILP
+    # 
     def combination_ilp(self):
         model = Model(name='dual_tree')
 
@@ -1430,93 +1432,6 @@ class SolidGridGraph(Graph):
         setattr(solution, 'model', model)
         return solution
 
-
-    def _combination_ilp(self):
-        model = Model(name='dual_tree')
-
-        xd = {
-            dual_node: model.binary_var(name=str(dual_node)) for dual_node in self.dual().nodes
-        }
-
-        xuv = {
-            edge: model.binary_var(name=str(edge)) for edge in self.undirected()
-        }
-
-        xv = {
-            node: {
-                'incoming': [xuv[edge] for edge in self if edge.t == node],
-                'outgoing': [xuv[edge] for edge in self if edge.s == node]
-            } for node in self.nodes
-        }
-
-        xf = {
-            dual_node: {
-                'ab': xuv[round(SolidGridGraph.right_edge(direction=(0, -1), at=dual_node))], 
-                'bc': xuv[round(SolidGridGraph.right_edge(direction=(1, 0), at=dual_node))],
-                'cd': xuv[round(SolidGridGraph.right_edge(direction=(0, 1), at=dual_node))],
-                'da': xuv[round(SolidGridGraph.right_edge(direction=(-1, 0), at=dual_node))]
-            } for dual_node in self.dual().interior.nodes
-        }
-
-        dual = {
-            node: {
-                'a': node + (-0.5, -0.5),
-                'b': node + (0.5, -0.5), 
-                'c': node + (0.5, 0.5), 
-                'd': node + (-0.5, 0.5)
-            } for node in self.nodes
-        }
-
-        allowed_four_fulls = self.allowed_four_fulls()
-
-        for node in xd:
-            if node not in self.dual().interior:
-                model.add_constraint(xd[node] == 0)
-
-        for node in dual.values():
-            a, b, c, d = node['a'], node['b'], node['c'], node['d']
-            if node not in allowed_four_fulls:
-                model.add_constraint(xd[a] + xd[b] + xd[c] + xd[d] <= 3)
-            model.add_constraint((xd[a] + xd[c]) - (xd[b] + xd[d]) <= 1)
-            model.add_constraint((xd[b] + xd[d]) - (xd[a] + xd[c]) <= 1)
-
-        for edge in xuv:
-            model.add_constraint(xuv[edge] + xuv[edge.switch()] <= 1)
-
-        for node in xv:
-            model.add_constraint(sum(xv[node]['incoming']) <= 1)
-            model.add_constraint(sum(xv[node]['outgoing']) <= 1)
-            model.add_constraint(sum(xv[node]['incoming']) == sum(xv[node]['outgoing']))
-
-        for (u, v) in dual:
-            if u in self.dual().interior and v in self.dual().exterior:
-                model.add_constraint(xuv[SolidGridGraph.to_dual_edge(Edge(v, u))] == 0)
-
-        for face in xf:
-            model.add_constraint(4*xd[face] - sum(xd[neighbor] for neighbor in self.dual().interior.neighbors(face)) <= 4*sum(xf[face].values()))
-            for edge in xf[face]:
-                model.add_constraint(xf[face][edge] <= xd[face])
-
-        for A in xf:
-            for B in self.dual().interior.neighbors(A):
-                A_oriented_edge = SolidGridGraph.to_dual_edge(Edge(A, B))
-                model.add_constraint(xuv[A_oriented_edge] + xd[B] <= 1)
-
-        xv_allowed_four_full = [sum(xv[v]['incoming']) + sum(xv[v]['outgoing']) for v in allowed_four_fulls]
-        model.add_constraint(sum(xuv.values()) == 2 * sum(xd.values()) + 2 - (4 * sum(1 - v for v in xv_allowed_four_full)))
-
-        model.maximize(
-            sum(xd.values())
-            +
-            sum(xuv.values())
-        )
-        model.solve()
-        solution_dual = SolidGridGraph() + [node for node in xd if not isinstance(xd[node], int) and model.solution[str(node)] > 0.0]
-        # solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
-        solution = SolidGridGraph() + [edge for edge in xuv if model.solution[str(edge)] > 0.0]
-        solution.dual().interior = solution_dual.make_solid()
-        setattr(solution, 'model', model)
-        return solution
 
     def components_shortest_paths(self, components):
         return {
