@@ -12,9 +12,7 @@ def shaded_faces(nodes, style='fill=black!10'):
         yield f"{chr(92)}fill[{style}] ({node[0]-0.5}cm-1pt, {node[1]-0.5}cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);"
 
 def shade_two_factor(graph, style='fill=black!10'):
-    dual = graph.dual()
-    yield from shaded_faces((SolidGridGraph.box(at=node) for node in dual.nodes if graph.two_factor.test_interior(node)), style=style)
-    # yield from shaded_faces(graph, (face for face in graph.faces if graph.two_factor.test_interior(graph.midpoint_at_face(face))), style=style)
+    yield from shaded_faces((node for node in graph.dual().interior.nodes if graph.two_factor.test_interior(node)), style=style)
 
 def visualize_hamiltonian_cycle(name, graph):
     i = 0
@@ -37,6 +35,12 @@ def visualize_hamiltonian_cycle(name, graph):
         i += 1
     tgraph.write(f'{name}{i}')
 
+# TikZGraph(*SolidGridGraph(Edge((0, 0), (0, 1)), SolidGridGraph.to_primal_edge(Edge((0, 0), (0, 1)))))\
+#     .add_edges([TikZEdge.DIRECTED(TikZEdge(edge)) for edge in [Edge((0, 0), (0, 1)), SolidGridGraph.to_primal_edge(Edge((0, 0), (0, 1)))]])\
+#     .on_nodes(TikZNode.NONE)\
+#     .write('2x2square_grayedges')
+# exit()
+
 def uot_test():
     i = 0
     # SolidGridGraph(((0, 2), (0, 1)), ((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 0), (2, 0)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 2), (3, 2)), ((2, 1), (3, 1)), ((3, 2), (3, 1)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 2), (5, 2)), ((5, 2), (5, 1)), ((4, 1), (5, 1)), ((5, 2), (6, 2)), ((5, 1), (6, 1)), ((6, 1), (6, 2)), ((4, 3), (4, 2)), ((4, 3), (5, 3)), ((5, 3), (5, 2)), ((5, 3), (6, 3)), ((6, 3), (6, 2))),
@@ -57,11 +61,10 @@ def uot_test():
         loaddir = 'max_tree_match'
         dual = graph.dual()
 
-        dual_tree = graph.dual_tree()
-
-        graph.match(include=graph - graph.minimum_spanning_tree())
+        dual_tree = graph.combination_ilp()
 
         black = dual_tree
+
         red = Graph()
         blue = Graph()
         orange = Graph()
@@ -81,23 +84,15 @@ def uot_test():
         #     .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
         #     .write(f'uot{i}_first')
 
-        # TikZGraph(*graph, *dual.interior)\
-        #     .add_edges([BLUE(edge) for edge in blue.remove_directed()])\
-        #     .add_edges([RED(edge) for edge in red.remove_directed()])\
-        #     .add_edges([GREEN(edge) for edge in green.remove_directed()])\
-        #     .add_edges([ORANGE(edge) for edge in orange.remove_directed()])\
-        #     .add_edges([TikZEdge(edge, force=True) for edge in black.remove_directed()])\
-        #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-        #     .on_nodes(lambda node: TikZNode.NONE(node) if node in graph else node)\
-        #     .write(f'uot{i}')
-
-        # nilp = graph.new_ilp()
-        # TikZGraph(*graph, *dual.interior)\
-        #     .add_edges([TikZEdge.DIRECTED(TikZEdge(edge)) for edge in nilp])\
-        #     .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-        #     .add_edges([RED(edge) for edge in sum(nilp.dual().interior.get_subtour_eliminations().keys(), start=Graph()).undirected().remove_directed()])\
-        #     .on_nodes(lambda node: TikZNode.NONE(node) if node not in nilp.dual().interior else node)\
-        #     .write(f'uot_{i}_new')
+        TikZGraph(*graph, *dual.interior)\
+            .add_edges([BLUE(edge) for edge in blue.remove_directed()])\
+            .add_edges([RED(edge) for edge in red.remove_directed()])\
+            .add_edges([GREEN(edge) for edge in green.remove_directed()])\
+            .add_edges([ORANGE(edge) for edge in orange.remove_directed()])\
+            .add_edges([TikZEdge.DIRECTED(TikZEdge(edge, force=True)) for edge in black])\
+            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+            .on_nodes(lambda node: TikZNode.NONE(node) if node not in black.dual().interior else node)\
+            .write(f'uot{i}')
 
         # exit()
         # TikZGraph(*list(graph)) + TikZGraph(*list(graph.dual()))\
@@ -179,7 +174,7 @@ TikZGraph(*dual_graph)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
         [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()],
-        [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_dual_edge(edge) not in dual_graph_bfs.undirected()]
+        [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_primal_edge(edge) not in dual_graph_bfs.undirected()]
     )\
     .write('dual_graph_bfs_tree_boundary')
 # for node in dual_graph.dual().nodes:
@@ -209,23 +204,23 @@ TikZGraph(*dual_graph, *lc_example_dual_tree)\
 lc_example = TikZGraph(*dual_graph)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
-        [TikZEdge.DOTTED(TikZEdge.GRAY(SolidGridGraph.to_dual_edge(edge))) for edge in lc_example_dual_tree.remove_directed()],
+        [TikZEdge.DOTTED(TikZEdge.GRAY(SolidGridGraph.to_primal_edge(edge))) for edge in lc_example_dual_tree.remove_directed()],
         [TikZEdge(edge, force=True) for edge in lc_example_dual_tree_boundary.remove_directed()], 
     )
 for dual_node in lc_example_dual_tree.nodes:
     face = SolidGridGraph.box(at=dual_node).intersect(lc_example_dual_tree_boundary)
     if len(face) == 0:
-        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{IV}}}};')
+        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{4}}}};')
     if len(face) == 1:
-        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{III}}}};')
+        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{3}}}};')
     if len(face) == 2:
         one, two = face
         if (abs(one.direction()[1][0]), abs(one.direction()[1][1])) != (abs(two.direction()[1][0]), abs(two.direction()[1][1])):
-            lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{II}}.a}};')
+            lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{2}}.a}};')
         else:
-            lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{II}}.b}};')
+            lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{2}}.b}};')
     if len(face) == 3:
-        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{I}}}};')
+        lc_example.add_foreground(f'\draw node[draw=none, fill=none, scale=0.75] at {dual_node} {{\\textbf{{1}}}};')
 
 lc_example.write('dual_graph_longest_cycle')
 
@@ -419,23 +414,9 @@ dual_pattern_example_1_dual_tree = dual_pattern_example_1.longest_cycle()
     .add_edges(
         [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_1.remove_directed()], 
         [TikZEdge(edge) for edge in dual_pattern_example_1_dual_tree.remove_directed()],
-        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(2, 5)).dual().interior).remove_directed()]
+        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(1, 4)).dual().interior).remove_directed()]
     )\
     .write('dual_pattern_example_2')
-
-
-# dual_pattern_example_2 = SolidGridGraph(((2, 0), (3, 0)), ((3, 0), (4, 0)), ((2, 0), (2, 1)), ((2, 1), (1, 1)), ((1, 1), (1, 2)), ((1, 2), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (1, 3)), ((1, 3), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (2, 5)), ((2, 5), (3, 5)), ((3, 5), (4, 5)), ((4, 5), (4, 6)), ((4, 6), (5, 6)), ((5, 6), (6, 6)), ((6, 6), (6, 5)), ((6, 5), (6, 4)), ((6, 4), (6, 3)), ((6, 3), (5, 3)), ((5, 3), (5, 2)), ((5, 2), (5, 1)), ((5, 1), (5, 0)), ((5, 0), (4, 0)), ((4, 0), (4, 1)), ((4, 1), (5, 1)), ((4, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((1, 3), (2, 3)), ((2, 4), (2, 3)), ((1, 3), (1, 2)), ((2, 3), (3, 3)), ((3, 4), (3, 3)), ((2, 4), (3, 4)), ((3, 5), (3, 4)), ((3, 4), (4, 4)), ((4, 5), (4, 4)), ((4, 4), (5, 4)), ((5, 4), (5, 5)), ((5, 5), (4, 5)), ((5, 5), (5, 6)), ((3, 3), (4, 3)), ((4, 3), (4, 4)), ((4, 3), (5, 3)), ((5, 4), (5, 3)), ((5, 4), (6, 4)), ((5, 5), (6, 5)), ((4, 3), (4, 2)), ((3, 2), (4, 2)), ((3, 3), (3, 2)), ((4, 2), (4, 1)), ((4, 2), (5, 2)), ((6, 3), (6, 2)), ((6, 2), (5, 2)), ((6, 2), (6, 1)), ((5, 1), (6, 1)))
-# dual_pattern_example_2_dual_tree = dual_pattern_example_2.longest_cycle()
-# (TikZGraph(*dual_pattern_example_2) + TikZGraph(*dual_pattern_example_2.dual().interior).make_bipartite(color={0:'black', 1:'black'}))\
-#     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_pattern_example_2_dual_tree else node)\
-#     .add_edges(
-#         [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_2.remove_directed()], 
-#         [TikZEdge(edge) for edge in dual_pattern_example_2_dual_tree.remove_directed()],
-#         [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(5, 1)).dual().interior).remove_directed()]
-#     )\
-#     .add_foreground(f'\draw node[circle, black, draw, fill=white, scale=0.5] at (5.5, 0.5) {{}};')\
-#     .write('dual_pattern_example_2')
-
 
 
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
@@ -500,9 +481,7 @@ TikZGraph(*allowed_4_full_square, *allowed_4_full_square.dual().interior)\
     )\
     .write('allowed_4_full_square')
 
-exit()
 
-exit()
 
 cat_image = plt.imread('cat.png')
 
@@ -549,24 +528,20 @@ for edge in list(example_graph):
     example_graph[TikZEdge(Edge(edge.t, midpoint)), assign]
 
 example_graph.add_edges(
-    [TikZEdge((example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5), (0, 0)), TikZEdge((example_graph_length, 0), midpoint)]
-)
-example_graph.add_edges([TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in example_graph])    
-example_graph.write('graph')
-del example_graph
+        [TikZEdge((example_graph_length / 2, ((example_graph_length ** 2) - ((example_graph_length / 2) ** 2))**0.5), (0, 0)), TikZEdge((example_graph_length, 0), midpoint)],
+        [TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in example_graph]
+    )\
+    .on_nodes(lambda node: TikZOptions.style('fill', 'white', node))\
+    .write('graph')
 
 # first example of a trail
 trail_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
 trail_graph.add_edges(
-    [
-        TikZEdge.DIRECTED(TikZEdge.SHORT(((0, 1), (1, 1))))
-    ],
-    [
-        TikZEdge.DIRECTED(edge) for edge in TikZGraph.vertex_sequence_to_edges([(0, 1), (1, 1), (1, 2), (0, 2), (0, 1), (0, 0), (1, 0)])
-    ]
-)
-trail_graph.write('trail')
-del trail_graph
+        [TikZEdge.DIRECTED(TikZEdge.SHORT(((0, 1), (1, 1))))],
+        [TikZEdge.DIRECTED(edge) for edge in TikZGraph.vertex_sequence_to_edges([(0, 1), (1, 1), (1, 2), (0, 2), (0, 1), (0, 0), (1, 0)])]
+    )\
+    .on_nodes(lambda node: TikZOptions.style('fill', 'white', node))\
+    .write('trail')
 
 # trail_graph = Graph(edges=[((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))])
 # trail_graph.make_bipartite = lambda: ([], trail_graph.nodes, trail_graph.nodes)
@@ -577,51 +552,36 @@ del trail_graph
 # walk_graph.make_bipartite = lambda: ([], walk_graph.nodes, walk_graph.nodes)
 # write_tex('walk', walk_graph, styles=[(['black', '->'], lambda _ : list(walk_graph.src_sink_paths((0, 0), (0, 2) ))[3]), (['black!30'], getEdges)])
 
-path_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
-path_graph.add_edges(
-    [
-        TikZEdge.DIRECTED(edge) for edge in [((1, 0), (1, 1)), ((1, 1), (0, 1)), ((0, 1), (0, 2))]
-    ],
-    # [
-    #     TikZEdge.GRAY(edge) for edge in path_graph
-    # ]
-)
-path_graph.write('path')
-del path_graph
+TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).add_edges(
+        [TikZEdge.DIRECTED(edge) for edge in [((1, 0), (1, 1)), ((1, 1), (0, 1)), ((0, 1), (0, 2))]],
+    )\
+    .on_nodes(lambda node: TikZOptions.style('fill', 'white', node))\
+    .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(1, 0), (1, 1), (0, 1), (0, 2)] else node)\
+    .write('path')
 
 # first example of a bipartite graph
 solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
-solid_grid_graph.make_bipartite()
-solid_grid_graph.add_edges(
-    [
-        TikZEdge(edge) for edge in solid_grid_graph.remove_directed()
-    ]
-)
-solid_grid_graph.write('solid')
-del solid_grid_graph
+solid_grid_graph.make_bipartite()\
+    .add_edges(
+        [TikZEdge(edge) for edge in solid_grid_graph.remove_directed()]
+    )\
+    .write('solid')
 
 grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
-grid_graph.make_bipartite()
-grid_graph.add_edges(
-    [
-        TikZEdge(edge) for edge in grid_graph.remove_directed()
-    ]
-)
-grid_graph.write('grid')
-del grid_graph
+grid_graph.make_bipartite()\
+    .add_edges(
+        [TikZEdge(edge) for edge in grid_graph.remove_directed()]
+    )\
+    .write('grid')
 
 # first example of a Hamiltonian path & Hamiltonian cycle
 hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
-hamiltonian_graph.make_bipartite()
-hamiltonian_graph.add_edges(
-    [
-        TikZEdge.DIRECTED(edge) for edge in list(hamiltonian_graph.hamiltonian_paths((1, 0)))[-2]
-    ],
-    [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in hamiltonian_graph.remove_directed()
-    ]
-)
-hamiltonian_graph.write('hamiltonian_path')
+hamiltonian_graph.make_bipartite()\
+    .add_edges(
+        [TikZEdge.DIRECTED(edge) for edge in list(hamiltonian_graph.hamiltonian_paths((1, 0)))[-2]],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in hamiltonian_graph.remove_directed()]
+    )\
+    .write('hamiltonian_path')
 
 hamiltonian_graph.edgesets[0] = [
     TikZEdge(edge) for edge in next(hamiltonian_graph.hamiltonian_cycles())
@@ -633,12 +593,8 @@ del hamiltonian_graph
 travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0))).undirected()
 travelling_salesman_tour_graph.make_bipartite()
 travelling_salesman_tour_graph.add_edges(
-    [
-        TikZEdge(edge) for edge in next(SolidGridGraph(*travelling_salesman_tour_graph).travelling_salesman_tours())
-    ],
-    [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph.remove_directed()
-    ]
+    [TikZEdge(edge) for edge in next(SolidGridGraph(*travelling_salesman_tour_graph).travelling_salesman_tours())],
+    [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph.remove_directed()]
 )
 travelling_salesman_tour_graph.write('travelling_salesman_tour')
 
@@ -646,22 +602,19 @@ travelling_salesman_tour_graph.write('travelling_salesman_tour')
 one_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
 one_factor_graph.make_bipartite()
 one_factor_graph.add_edges(
-    [
-        TikZEdge(edge) for edge in [((0, 2), (1, 2)), ((2, 0), (3, 0)), ((2, 2), (2, 1)), ((3, 2), (3, 1)), ((0, 1), (0, 0)), ((1, 1), (1, 0))]
-    ]
+    [TikZEdge(edge) for edge in [((0, 2), (1, 2)), ((2, 0), (3, 0)), ((2, 2), (2, 1)), ((3, 2), (3, 1)), ((0, 1), (0, 0)), ((1, 1), (1, 0))]]
 )
 one_factor_graph.write('one_factor')
 del one_factor_graph
 
 # no_one_factor.tex
-no_one_factor_graph = TikZGraph(*Graph.vertex_sequence_to_edges([(0, 1), (1.7293088488585, 2.0047342460869), (1.7347798055927, 0.0047417289428), (0, 1)]))
-no_one_factor_graph.add_edges(
-    [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_one_factor_graph
-    ]
-)
-no_one_factor_graph.write('no_one_factor')
-del no_one_factor_graph
+no_one_factor_edges = Graph.vertex_sequence_to_edges([(0, 1), (1.7293088488585, 2.0047342460869), (1.7347798055927, 0.0047417289428), (0, 1)])
+TikZGraph(*no_one_factor_edges)\
+.add_edges(
+    [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_one_factor_edges]
+    )\
+    .on_nodes(lambda node: TikZOptions.style('fill', 'white', node))\
+    .write('no_one_factor')
 
 # two_factor.tex
 two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
@@ -685,50 +638,22 @@ no_two_factor_graph.add_edges(
 no_two_factor_graph.write('no_two_factor')
 del no_two_factor_graph, travelling_salesman_tour_graph
 
-import os
-import pickle
-big_two_factor_graph = SolidGridGraph()
-if not os.path.exists('big_two_factor.graph'):
-    for _ in range(20):
-        big_two_factor_graph.add_random_face(15, 15)
 
-    while len(big_two_factor_graph.two_factor) == 0:
-        delattr(big_two_factor_graph, '_two_factor')
-        big_two_factor_graph.add_random_face(15, 15)
-    big_tf = {
-        'nodes': list(tuple(node) for node in big_two_factor_graph.nodes),
-        'edges': list((tuple(edge.s), tuple(edge.t)) for edge in big_two_factor_graph),
-        'twof': list((tuple(edge.s), tuple(edge.t)) for edge in big_two_factor_graph.two_factor)
-    }
-    pickle.dump(big_tf, open('big_two_factor.graph', 'wb'))
-else:
-    big_tf = pickle.load(open('big_two_factor.graph', 'rb'))
-    for edge in big_tf['edges']:
-        big_two_factor_graph[Edge(Node(edge[0][0], edge[0][1]), Node(edge[1][0], edge[1][1])), assign]
-    big_two_factor_graph.two_factor = Graph(*big_tf['twof'])
+# big_two_factor_graph = SolidGridGraph(((0, 1), (0, 0)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((0, 2), (0, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)))
 
-big_two_factor_graph = big_two_factor_graph.undirected()
+has_two_factor = False
+while not has_two_factor:
+    big_two_factor_graph = SolidGridGraph.random_thick_solid_grid_graph(n=14)
+    has_two_factor = len(big_two_factor_graph.two_factor) > 0
 
-strips = big_two_factor_graph.get_alternating_strips()
-static = big_two_factor_graph.static_alternating_strip()
-
-shaded = shade_two_factor(big_two_factor_graph)
-big_two_factor_graph = TikZGraph(*list(big_two_factor_graph)).undirected()
-big_two_factor_graph.add_background(*shaded)
-
-big_two_factor_graph.add_edges(
-    [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor.remove_directed()
-    ]
-)
-
-for node in big_two_factor_graph.nodes:
-    big_two_factor_graph.nodes[node].style["draw"] = 'none'
-    big_two_factor_graph.nodes[node].style["fill"] = 'none'
-
-big_two_factor_graph.write('big_two_factor')
-del big_two_factor_graph
-
+TikZGraph(*big_two_factor_graph).make_bipartite()\
+    .add_edges(
+        [TikZEdge(edge) for edge in big_two_factor_graph.two_factor.remove_directed()]
+    ).on_nodes(
+        lambda node: TikZNode.NONE(node) if node not in big_two_factor_graph.nodes else node
+    )\
+    .add_background(*[f"{chr(92)}fill[fill=black!10] ({node[0]-0.5}cm-1pt, {node[1]-0.5}cm-1pt) rectangle ++(1cm+2pt, 1cm+2pt);" for node in big_two_factor_graph.two_factor.dual().interior.nodes])\
+    .write('big_two_factor')
 
 x1 = (0, 2)
 x2 = (0, 1)
@@ -737,67 +662,107 @@ y1 = (1, 2)
 y2 = (1, 1)
 y3 = (1, 0)
 
-cubic_graph = TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3)).undirected()
-cubic_graph.make_bipartite()
-cubic_graph.add_edges(
-    [TikZOptions.COLOR('red', edge) for edge in cubic_graph.remove_directed() if edge.s == x2]
-)
+TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3)).undirected()\
+    .make_bipartite()\
+    .add_edges(
+        [TikZOptions.COLOR('black', TikZEdge(edge)) for edge in [(x1, y1), (x1, y3)]],
+        [TikZOptions.COLOR('black', TikZEdge(edge)) for edge in [(x2, y2), (x2, y3)]],
+        [TikZOptions.COLOR('black', TikZEdge(edge)) for edge in [(x3, y1), (x3, y3)]]
+    )\
+    .add_foreground(f'\draw node[scale=0.5, label=above left: $x_1$] at {str(x1)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=left: $x_2$] at {str(x2)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below left: $x_3$] at {str(x3)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above right: $y_1$] at {str(y1)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=right: $y_2$] at {str(y2)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below right: $y_3$] at {str(y3)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5] at (0, -1.5) {{}};')\
+    .write('cubic_graph_1')
 
-cubic_graph.add_edges(
-    [TikZOptions.COLOR('blue', edge) for edge in cubic_graph.remove_directed() if edge.s == x3]
-)
+cubic_embedding = SolidGridGraph(((0, 1), (0, 0)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0)), ((2, 0), (3, 0)), ((1, 0), (2, 0)), ((0, 0), (1, 0)), ((1, 4), (1, 3)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 4), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((0, 2), (1, 2)), ((0, 3), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((3, 4), (3, 3)), ((3, 3), (4, 3)), ((3, 2), (4, 2)), ((3, 2), (3, 1)), ((3, 1), (4, 1)), ((2, 1), (2, 0)), ((1, 1), (2, 1)), ((1, 2), (1, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)))
+TikZGraph(*cubic_embedding)\
+    .make_bipartite()\
+    .add_edges(
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cubic_embedding.remove_directed()],
+        [TikZEdge(edge, force=True) for edge in [((0, 1), (0, 0)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0)), ((2, 0), (3, 0)), ((1, 0), (2, 0)), ((0, 0), (1, 0)), ((1, 4), (1, 3)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 4), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0))]]
+    )\
+    .add_foreground(f'\draw node[scale=0.5, label=above left: $x_1$] at (0, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above left: $x_2$] at (2, 2) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above: $x_3$] at (2, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above: $y_1$] at (1, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above right: $y_2$] at (3, 2) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below: $y_3$] at (3, 0) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=right: $\phantom{{y_3}}$] at (4, 0) {{}};')\
+    .write('cubic_embedding_1')
 
-cubic_graph.add_edges(list(cubic_graph.undirected()))
+TikZGraph((x1, y1), (y1, x2), (x2, y3), (y3, x3), (x3, y2), (y2, x1), (x2, y2)).undirected()\
+    .make_bipartite(color={0: 'white', 1: 'black'})\
+    .add_edges(
+        [TikZEdge(edge) for edge in [(x1, y1), (y1, x2), (x2, y3), (y3, x3), (x3, y2), (y2, x1), (x2, y2)]],
+    )\
+    .add_foreground(f'\draw node[scale=0.5, label=above left: $x_1$] at {str(x1)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=left: $x_2$] at {str(x2)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below left: $x_3$] at {str(x3)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above right: $y_1$] at {str(y1)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=right: $y_2$] at {str(y2)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below right: $y_3$] at {str(y3)} {{}};')\
+    .add_foreground(f'\draw node[scale=0.5] at (0, -1.5) {{}};')\
+    .write('cubic_graph_2')
 
-cubic_graph.write('cubic_graph')
-del cubic_graph
+TikZGraph(*cubic_embedding)\
+    .make_bipartite()\
+    .add_edges(
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cubic_embedding.remove_directed()],
+        [TikZEdge(edge, force=True) for edge in [((0, 1), (0, 0)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((1, 4), (2, 4)), ((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((3, 0), (4, 0)), ((2, 0), (3, 0)), ((1, 0), (2, 0)), ((0, 0), (1, 0)), ((1, 4), (1, 3)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (2, 0))]]
+    )\
+    .add_foreground(f'\draw node[scale=0.5, label=above left: $x_1$] at (0, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=below: $x_2$] at (2, 0) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above right: $x_3$] at (4, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=left: $y_1$] at (0, 1) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=above: $y_2$] at (1, 4) {{}};')\
+    .add_foreground(f'\draw node[scale=0.5, label=right: $y_3$] at (4, 1) {{}};')\
+    .write('cubic_embedding_2')
 
-cubic_embedding = TikZGraph(((0, 4), (1, 4)), ((1, 4), (1, 3)), ((1, 3), (0, 3)), ((0, 4), (0, 3)), ((1, 4), (2, 4)), ((2, 4), (2, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((2, 4), (3, 4)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3)), ((0, 3), (0, 2)), ((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 3), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 3)), ((2, 1), (3, 1)), ((3, 2), (3, 1)), ((2, 2), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 3)), ((3, 2), (4, 2)), ((4, 2), (4, 1)), ((3, 1), (4, 1)), ((4, 2), (4, 3)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 0), (4, 0)), ((4, 0), (4, 1)))
-cubic_embedding.make_bipartite()
-cubic_embedding.add_edges(
-    [TikZOptions.COLOR('red', TikZEdge(edge)) for edge in [((2, 2), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (1, 4)), ((2, 2), (3, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0))]]
-)
+TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)))\
+    .make_bipartite()\
+    .add_edges(TikZEdge(edge) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed())\
+    .write('cluster')
 
-cubic_embedding.add_edges(
-    [TikZOptions.COLOR('blue', TikZEdge(edge)) for edge in [((2, 4), (3, 4)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((4, 3), (4, 2)), ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((4, 0), (3, 0)), ((2, 4), (1, 4)), ((2, 4), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2))]]
-)
+tentacle = SolidGridGraph(((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (4, 1)), ((4, 1), (5, 1)), ((5, 1), (5, 2)), ((5, 2), (5, 3)), ((5, 3), (6, 3)), ((6, 3), (6, 2)), ((5, 2), (6, 2)), ((6, 2), (6, 1)), ((5, 1), (6, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 0), (3, 0)), ((3, 0), (3, 1)), ((3, 0), (4, 0)), ((4, 0), (4, 1)), ((4, 0), (5, 0)), ((5, 0), (5, 1)), ((5, 0), (6, 0)), ((6, 0), (6, 1)))
+TikZGraph(*tentacle)\
+    .make_bipartite()\
+    .add_edges(TikZEdge(edge) for edge in tentacle.remove_directed())\
+    .add_foreground(f'\draw node[scale=0.5] at (0, -0.75) {{}};')\
+    .write('tentacle')
 
-cubic_embedding.add_edges(
-    [TikZEdge(edge) for edge in [((0, 0), (0, 1)), ((0, 1), (0, 2)), ((0, 2), (0, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 4)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]]
-)
+cluster_tentacle_example = SolidGridGraph(((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 0), (3, 0)), ((3, 0), (4, 0)), ((4, 0), (5, 0)), ((5, 0), (6, 0)), ((6, 0), (7, 0)), ((7, 0), (8, 0)), ((8, 0), (9, 0)), ((2, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 1), (0, 0)), ((0, 1), (0, 2)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((3, 1), (4, 1)), ((4, 1), (4, 0)), ((4, 1), (5, 1)), ((5, 1), (5, 0)), ((5, 1), (6, 1)), ((6, 1), (6, 0)), ((6, 1), (7, 1)), ((7, 1), (7, 0)), ((7, 1), (8, 1)), ((8, 1), (8, 0)), ((8, 1), (9, 1)), ((9, 1), (9, 0)), ((8, 1), (8, 2)), ((8, 2), (9, 2)), ((9, 2), (9, 1)), ((8, 2), (8, 3)), ((8, 3), (9, 3)), ((9, 3), (9, 2)), ((8, 4), (8, 3)), ((8, 4), (9, 4)), ((9, 4), (9, 3)), ((8, 6), (8, 5)), ((8, 5), (8, 4)), ((8, 5), (9, 5)), ((9, 5), (9, 4)), ((8, 6), (9, 6)), ((9, 6), (9, 5)), ((8, 4), (7, 4)), ((7, 4), (7, 5)), ((7, 5), (8, 5)), ((7, 6), (7, 5)), ((7, 6), (8, 6)))
+TikZGraph(*cluster_tentacle_example)\
+    .make_bipartite()\
+    .add_edges(TikZEdge(edge) for edge in cluster_tentacle_example.remove_directed())\
+    .add_foreground(f'\draw node[scale=2.0, label=left: \scalebox{{2.0}}{{$x$}}] at (0, 1) {{}};')\
+    .add_foreground(f'\draw node[scale=2.0, label=right: \scalebox{{2.0}}{{$y$}}] at (9, 5) {{}};')\
+    .write('cluster_tentacle_example')
 
-cubic_embedding.write('cubic_embedding')
-del cubic_embedding
+
 
 # type_3_before_flip.tex
 type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
-type_3_before_flip.make_bipartite()
-type_3_before_flip.add_edges(
-    [
-        TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]
-    ],
-    [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip.remove_directed()
-    ]
-)
-type_3_before_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(1.1, 1);", "\\fill[fill=black!10] (2, 0) rectangle ++(1.1, 1);")
-type_3_before_flip.add_background("\\draw node at (1.5, 0.5) {\\textbf{III}};")
-type_3_before_flip.write('type_3_before_flip')
-del type_3_before_flip
+type_3_before_flip.make_bipartite()\
+    .add_edges(
+        [TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip.remove_directed()]
+    )\
+    .add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(1.1, 1);", "\\fill[fill=black!10] (2, 0) rectangle ++(1.1, 1);")\
+    .add_background("\\draw node at (1.5, 0.5) {\\textbf{III}};")\
+    .write('type_3_before_flip')\
 
 type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
-type_3_after_flip.make_bipartite()
-type_3_after_flip.add_edges(
-    [
-        TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]
-    ],
-    [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip.remove_directed()
-    ]
-)
-type_3_after_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(3.1, 1);")
-type_3_after_flip.write('type_3_after_flip')
-del type_3_after_flip
+type_3_after_flip.make_bipartite()\
+    .add_edges(
+        [TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip.remove_directed()]
+    )\
+    .add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(3.1, 1);")\
+    .write('type_3_after_flip')
 
 short_odd_alternating_strip = TikZGraph(((0, 1), (0, 0)), ((1, 1), (1, 0)))
 short_odd_alternating_strip.add_edges(list(short_odd_alternating_strip))

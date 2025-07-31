@@ -11,40 +11,61 @@ import sqlite3
 conn = sqlite3.connect('graph.db')
 cursor = conn.cursor()
 
-lt, gt = 0, 0
-for n in range(10, 1000):
-    cursor.execute(f"SELECT graph, dtree, new, combo FROM graphs WHERE id = ?", (n,))
-    graph, dtree, new, combo = cursor.fetchone()
-    graph, dtree, new, combo = SolidGridGraph().decompress(graph), SolidGridGraph().decompress(dtree), SolidGridGraph().decompress(new), SolidGridGraph().decompress(combo)
-    # if len(dtree) != len(new):
-    if len(combo) < len(new) or len(combo) < len(dtree):
-        if len(combo) < len(new):
-            names = f'dtree_lt_counterexample_{lt}', f'new_gt_counterexample_{lt}', f'combo_dtree_lt_new_{lt}'
-            lt += 1
-        else:
-            names = f'dtree_gt_counterexample_{gt}', f'new_lt_counterexample_{gt}', f'combo_new_lt_dtree_{gt}'
-            gt += 1
+interp = lambda strs: f'''
+{chr(92)}begin{{tabular}}{{ |c|c|c|c| }}
+    {chr(92)}hline
+    nodes & covered & t & cuts {chr(92)}{chr(92)}
+    {chr(92)}hline
+        {("" + chr(92) + chr(92) + chr(10)).join(strs)}{chr(92)}{chr(92)}
+{chr(92)}end{{tabular}}
+'''
 
-        dtree, new, combo = graph.dual_tree(), graph.new_ilp(), graph.combination_ilp()
+D = {
+    'graph_n': [],
+    'ilp_n': [],
+    'dt': [],
+    'n_cuts': []
+}
+S = []
+n = 10
+data = n
+while data is not None:
+    cursor.execute(f'SELECT graph_n, ilp_n, dt, n_cuts FROM graphs WHERE id = ?', (n,))
+    data = cursor.fetchone()
+    if data is not None:
+        graph_n, ilp_n, dt, n_cuts = data
+        D['graph_n'].append(graph_n)
+        D['ilp_n'].append(ilp_n)
+        D['dt'].append(dt)
+        D['n_cuts'].append(n_cuts)
+        S.append(' & '.join([str(graph_n), str(ilp_n), str(round(dt, 1)), str(n_cuts)]))
+    n += 1
 
-        nodes = set(list(dtree.dual().interior.nodes)).intersection(set(list(new.dual().interior.nodes)))
+file = open('..\draft\examples\data.tex', 'w')
+file.write(interp(S))
+file.close()
 
-        TikZGraph(*graph, *dtree, *graph.dual())\
-            .add_edges([TikZEdge(edge, force=True) for edge in dtree.remove_directed()])\
+print(D['n_cuts'])
+
+plt.plot(range(10, 10+len(D['dt'])), D['dt'], label='dettime')
+plt.plot(range(10, 10+len(D['n_cuts'])), D['n_cuts'], label='# fractional cuts')
+plt.plot(range(10, 10+len(D['graph_n'])), [g - i for (g, i) in zip(D['graph_n'], D['ilp_n'])], label='nodes - covered' )
+plt.legend(loc='upper left')
+plt.xlabel('# faces')
+plt.show()
+
+exit()
+
+i = 0
+for n in range(50, 1000):
+    cursor.execute(f"SELECT graph, ilp FROM graphs WHERE id = ?", (n,))
+    data = cursor.fetchone()
+    graph, ilp = data
+    graph, ilp = SolidGridGraph().decompress(graph), SolidGridGraph().decompress(ilp)
+    if len(ilp.nodes) < len(graph.nodes):
+
+        TikZGraph(*graph, *ilp, *graph.dual())\
+            .add_edges([TikZEdge.DIRECTED(TikZEdge(edge, force=True)) for edge in ilp])\
             .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node not in dtree.dual().interior else node)\
-            .write(names[0])
-
-        TikZGraph(*graph, *new, *graph.dual())\
-            .add_edges([TikZEdge(edge, force=True) for edge in new.remove_directed()])\
-            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node not in new.dual().interior else node)\
-            .write(names[1])
-
-        TikZGraph(*graph, *combo, *graph.dual())\
-            .add_edges([TikZEdge(edge, force=True) for edge in combo.remove_directed()])\
-            .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
-            .on_nodes(lambda node: TikZNode.NONE(node) if node not in combo.dual().interior else node)\
-            .write(names[2])
-
-            # .on_nodes(lambda node: TikZNode.NONE(node) if node not in combo.dual().interior else node)\
+            .on_nodes(lambda node: TikZNode.NONE(node) if node not in ilp.dual().interior else node)\
+            .write(f'ilp_example_{i}')

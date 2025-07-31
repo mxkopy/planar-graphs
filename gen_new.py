@@ -100,7 +100,7 @@ TikZGraph(*dual_graph)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
         [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()],
-        [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_dual_edge(edge) not in dual_graph_bfs.undirected()]
+        [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_primal_edge(edge) not in dual_graph_bfs.undirected()]
     )\
     .write('dual_graph_bfs_tree_boundary')
 
