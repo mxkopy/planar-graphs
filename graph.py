@@ -79,6 +79,9 @@ class Node(tuple):
         node.size = 1
         return node
 
+    def __abs__(self):
+        return Node(abs(x) for x in self)
+
     def __add__(self, other):
         if isinstance(other, (tuple, Node)):
             return Node(self[i]+o for i, o in enumerate(other))
@@ -101,9 +104,9 @@ class Node(tuple):
     
     def __truediv__(self, other):
         if isinstance(other, (tuple, Node)):
-            return Node(self[i]/o for i, o in enumerate(other))
+            return Node(0 if i == 0 else i/o for i, o in zip(self, other))
         else:
-            return Node(i/other for i in self)
+            return Node(0 if i == 0 else i/other for i in self)
 
     def __radd__(self, other):
         return self + other
@@ -224,7 +227,7 @@ class Edge:
         self.s, self.t = round(self.s, digits), round(self.t, digits)
         return self
 
-    def undirected(self):
+    def double_directed(self):
         # if not hasattr(self.s, 'color') or not hasattr(self.t, 'color'):
         return self.__class__(min(self.s, self.t, key=hash), max(self.s, self.t, key=hash))
         # else:
@@ -263,7 +266,8 @@ class Edge:
         return atan2(y, x)
     
     def direction(self):
-        return self.__class__(self.s-self.s, self.t-self.s)
+
+        return self.__class__(self.s-self.s, (self.t-self.s) / abs(self.t-self.s) )
     
     def rotate(self, degrees):
         theta = radians(degrees)
@@ -463,17 +467,17 @@ class EdgeSet(setdict):
             covered.add(edge.t)
         return covered
 
-    def undirected(self):
+    def double_directed(self):
         graph = self.copy()
         for edge in list(graph):
             graph[edge.switch(), assign]
         return graph
 
-    def remove_directed(self):
-        graph = self.undirected()
+    def single_directed(self):
+        graph = self.double_directed()
         for edge in list(graph):
-            if edge.undirected().switch() in graph:
-                del graph[edge.undirected().switch()]
+            if edge.double_directed().switch() in graph:
+                del graph[edge.double_directed().switch()]
         return graph
 
     def intersect(self, other):
@@ -651,7 +655,7 @@ class Graph(EdgeSet):
     def maximum_flow(self, srcs, sinks, src_sink_weight=float('inf')):
         graph = self.copy()
         graph.antiparallel = {}
-        for edge in graph.remove_directed():
+        for edge in graph.single_directed():
             if edge.switch() in graph:
                 del graph[edge.switch()]
                 edge_1 = graph[Edge(edge.midpoint(), edge.s), assign]
@@ -673,7 +677,7 @@ class Graph(EdgeSet):
         def residual_capacity(graph, edge):
             return capacity[edge] - flow[edge] if edge in graph and edge.switch() not in graph else flow[edge.switch()] if edge.switch() in graph else 0
         def residual_graph(graph):
-            residual = graph.copy().undirected()
+            residual = graph.copy().double_directed()
             for edge in list(residual):
                 if residual_capacity(graph, edge) == 0:
                     del residual[edge]
@@ -713,13 +717,13 @@ class Graph(EdgeSet):
                 del graph[edge]
         graph.unmatched = []
         for node in graph.nodes:
-            if len(graph.undirected().neighbors(node)) != 1:
+            if len(graph.double_directed().neighbors(node)) != 1:
                 graph.unmatched.append(node)
-        return graph.undirected()
+        return graph.double_directed()
 
     def matching_incompatible(self, matching):
         incompatible = EdgeSet()
-        self = self.undirected()
+        self = self.double_directed()
         for a in matching.covered_nodes():
             for b in self.nodes:
                 if ((a, b) in self or (b, a) in self):
@@ -731,7 +735,7 @@ class Graph(EdgeSet):
 
     def match(self, include=EdgeSet(), exclude=EdgeSet(), force_include=[], force_exclude=[]):
         model = Model(name='one_factor')
-        graph = self.undirected()
+        graph = self.double_directed()
         edge_vars = {
             edge: model.integer_var(name=str((edge.s, edge.t))) for edge in graph
         }
@@ -759,7 +763,7 @@ class Graph(EdgeSet):
             sum(edge_vars[edge] for edge in edge_vars if (edge in exclude_incompatible) or (edge.switch() in exclude_incompatible))
         )
         model.solve()
-        return self.__class__(*([] if model.solution is None else (edge for edge in graph if model.solution[str(edge)] == 1.0))).undirected()
+        return self.__class__(*([] if model.solution is None else (edge for edge in graph if model.solution[str(edge)] == 1.0))).double_directed()
 
     def forced_edges(self, edge):
         if not hasattr(self, '_forced_edges'):
@@ -779,7 +783,7 @@ class Graph(EdgeSet):
         return forcing_set
 
     def shortest_cycle_at(self, src, nontrivial=True):
-        bfs_tree = self.bfs(src).undirected()
+        bfs_tree = self.bfs(src).double_directed()
         if len(self-bfs_tree) == 0:
             return Graph()
         def path_length(src, dest):
@@ -804,7 +808,7 @@ class Graph(EdgeSet):
         p1, p2 = Graph(*Graph.vertex_sequence_to_edges(p1)), Graph(*Graph.vertex_sequence_to_edges(p2))
         if len(p1.intersect(p2)) > 0:
             return Graph()
-        sc = (p1+p2+edges[0]).undirected()
+        sc = (p1+p2+edges[0]).double_directed()
         if nontrivial and len(sc) == 8:
             return Graph()
         return sc
@@ -818,7 +822,7 @@ class Graph(EdgeSet):
         return sbt
 
     def minimum_spanning_tree(self, sort_edges=lambda graph, tree, edge: 1, must_include=EdgeSet()):
-        tree = Graph(*must_include.undirected())
+        tree = Graph(*must_include.double_directed())
         n = -1
         while n != len(tree):
             n = len(tree)
@@ -829,7 +833,7 @@ class Graph(EdgeSet):
                 tree[edge.switch(), assign]
             except StopIteration:
                 pass
-        return tree.undirected()
+        return tree.double_directed()
 
     def min_cut(self, src, dest):
         model = Model(name='min_cut')
@@ -933,7 +937,7 @@ class Graph(EdgeSet):
         def in_range(edge, axis=0):
             ir = lambda edge: edge.s[axis] <= point[axis] and point[axis] <= edge.t[axis]
             return ir(edge) or ir(edge.switch())
-        edges = set([edge.undirected() for edge in self.remove_directed() if in_range(edge)])
+        edges = set([edge.double_directed() for edge in self.single_directed() if in_range(edge)])
         above = [edge for edge in edges if edge.s[1] >= point[1] and edge.t[1] > point[1]]
         return (len(above) % 2) != 0
 
@@ -966,11 +970,11 @@ class SolidGridGraph(Graph):
 
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    def __init__(self, *args, edges=[], undirected=True):
+    def __init__(self, *args, edges=[], double_directed=True):
         super().__init__(*args, *edges)
         for edge in list(self):
             self[edge, assign]
-        if undirected:
+        if double_directed:
             for edge in list(self):
                 self[edge.switch(), assign]
 
@@ -984,7 +988,7 @@ class SolidGridGraph(Graph):
     def face_at_midpoint(self, point):
         points = (point[0]-0.5,point[1]-0.5), (point[0]-0.5,point[1]+0.5), (point[0]+0.5,point[1]+0.5), (point[0]+0.5, point[1]-0.5), (point[0]-0.5,point[1]-0.5)
         points = [(int(x), int(y)) for (x, y) in points]
-        return self.intersect(Graph(*Graph.vertex_sequence_to_edges(points)).undirected())
+        return self.intersect(Graph(*Graph.vertex_sequence_to_edges(points)).double_directed())
 
     def midpoint_at_face(self, face):
         nodes = set([edge.s for edge in face]+[edge.t for edge in face])
@@ -992,40 +996,8 @@ class SolidGridGraph(Graph):
             raise ValueError(f"Attempted to get midpoint at incomplete face {face}.")
         return sum(nodes, start=Node(0, 0)) * 0.25
 
-    @property
-    def faces(self):
-        if not hasattr(self, '_faces'):
-            faces = set()
-            def boxes(node):
-                def box(axis):
-                    return self.__class__(axis, axis.take_right(), axis.take_right().take_right(), axis.take_right().take_right().take_right())
-                return [box(Edge(node, node + direction)) for direction in SolidGridGraph.directions]
-            for node in self.nodes:
-                for face in boxes(node):
-                    faces.add(face)
-            self._faces = faces
-        return self._faces
-    
-    @faces.setter
-    def faces(self, value):
-        self._faces = value
-
-    @property
-    def interior_faces(self):
-        if not hasattr(self, '_interior_faces'):
-            faces = set()
-            for face in self.faces:
-                if face in self:
-                    faces.add(face)
-            self._interior_faces = faces
-        return self._interior_faces
-
-    @interior_faces.setter
-    def interior_faces(self, value):
-        self._interior_faces = value
-
     def to_primal_edge(edge):
-        return Edge(edge.midpoint(), edge.parallel_right().midpoint()).midpoint(), Edge(edge.midpoint(), edge.parallel_left().midpoint()).midpoint()
+        return Edge(Edge(edge.midpoint(), edge.parallel_right().midpoint()).midpoint(), Edge(edge.midpoint(), edge.parallel_left().midpoint()).midpoint())
 
     def to_dual_edge(edge):
         return SolidGridGraph.to_primal_edge(edge).switch()
@@ -1051,6 +1023,9 @@ class SolidGridGraph(Graph):
             return self._dual
         return self._dual
 
+    def border(self):
+        return SolidGridGraph(*[edge for edge in self if (SolidGridGraph.to_dual_edge(edge).s in self.dual().interior.nodes) != (SolidGridGraph.to_dual_edge(edge).t in self.dual().interior.nodes)])
+
     # check if the exterior nodes in the dual graph are connected
     def is_solid(self):
         dual = self.dual()
@@ -1060,8 +1035,8 @@ class SolidGridGraph(Graph):
         graph = SolidGridGraph()
         for node in dual.nodes:
             graph += SolidGridGraph.box(at=node)
-        graph = graph.undirected()
-        return graph - [SolidGridGraph.to_primal_edge(edge) for edge in dual.undirected()]
+        graph = graph.double_directed()
+        return graph - [SolidGridGraph.to_primal_edge(edge) for edge in dual.double_directed()]
 
     # Left, right, top/front, and bottom/back edges of a box oriented by a direction
     # using midpoint coordinates
@@ -1083,7 +1058,7 @@ class SolidGridGraph(Graph):
         return Edge(SolidGridGraph.left_edge(direction, at).t, SolidGridGraph.right_edge(direction, at).s)
 
     def box(at=Node(0.5, 0.5)):
-        return SolidGridGraph() + [SolidGridGraph.right_edge(direction=d, at=at) for d in SolidGridGraph.directions]        
+        return SolidGridGraph(*[SolidGridGraph.right_edge(direction=d, at=at) for d in SolidGridGraph.directions], double_directed=False)
 
     def nine_neighborhood(at=Node(0, 0)):
         neighborhood = SolidGridGraph()
@@ -1183,8 +1158,8 @@ class SolidGridGraph(Graph):
         solution_dual = SolidGridGraph()
         solution_dual += [node for node in xs if not isinstance(xs[node], int) and round(model.solution[str(node)]) == 1]
         solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
-        solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).undirected())
-        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).remove_directed()
+        solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).double_directed())
+        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).single_directed()
         solution.dual().interior = solution_dual
         setattr(solution, 'model', model)
         return solution
@@ -1192,11 +1167,11 @@ class SolidGridGraph(Graph):
     def new_ilp(self):
         model = Model(name='new_ilp')
 
-        dual = self.undirected().dual()
+        dual = self.double_directed().dual()
 
         # Set up indicator variables for primal edges
         xuv = {
-            edge: model.binary_var(name=str(edge)) for edge in self.undirected()
+            edge: model.binary_var(name=str(edge)) for edge in self.double_directed()
         }
 
         # Set up indicator variables for dual nodes
@@ -1269,8 +1244,8 @@ class SolidGridGraph(Graph):
         pre_subtour_elimination = SolidGridGraph(*([] if model.solution is None else (edge for edge in xuv if round(model.solution[str(edge)]) == 1)))
         solution_dual = dual.interior - [node for node in dual.interior.nodes if not pre_subtour_elimination.test_interior(node)]
         solution_dual = SolidGridGraph.eliminate_subtours(solution_dual.make_solid())
-        solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).undirected())
-        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).remove_directed()
+        solution_dual = SolidGridGraph(*max(solution_dual.components().values(), key=len).double_directed())
+        solution = SolidGridGraph.boundary_from_dual_tree(solution_dual.make_solid()).single_directed()
         solution.dual().interior = solution_dual
         setattr(solution, 'model', model)
         return solution
@@ -1279,10 +1254,10 @@ class SolidGridGraph(Graph):
     # combination of the old 2x2 square ILP and new oriented tour ILP from J. Fix
     def combination_ilp(self, subtours=[]):
         model = Model(name='dual_tree')
-        for param in model.parameters.mip.cuts.generate_params():
-            # print(param.cpx_name)
-            if not ('FRACCUTS' in param.cpx_name and 'LOCALIMPLBD' not in param.cpx_name):
-                param.set(-1)
+        # for param in model.parameters.mip.cuts.generate_params():
+        #     # print(param.cpx_name)
+        #     if not ('FRACCUTS' in param.cpx_name and 'LOCALIMPLBD' not in param.cpx_name):
+        #         param.set(-1)
             
         # Set up indicator variables for dual nodes
         xd = {
@@ -1299,7 +1274,7 @@ class SolidGridGraph(Graph):
 
         # Set up indicator variables for primal edges
         xuv = {
-            edge: model.binary_var(name=str(edge)) for edge in self.undirected()
+            edge: model.binary_var(name=str(edge)) for edge in self.double_directed()
         }
 
         # Associate primal nodes with their incoming/outgoing edges 
@@ -1353,13 +1328,14 @@ class SolidGridGraph(Graph):
             model.add_constraint(sum(xv[node]['incoming']) == sum(xv[node]['outgoing']))
 
         # Boundary CCW orientation constraint 
-        for (u, v) in dual:
-            if u in self.dual().interior and v in self.dual().exterior:
-                model.add_constraint(xuv[SolidGridGraph.to_primal_edge(Edge(v, u))] == 0)
+        # for (u, v) in dual:
+        #     if u in self.dual().interior and v in self.dual().exterior:
+        #         model.add_constraint(xuv[SolidGridGraph.to_primal_edge(Edge(v, u))] == 0)
 
         for face in xf:
+            model.add_constraint(xd[face] <= sum(xf[face].values()))
             # Interior face implies at least one oriented edge
-            model.add_constraint(4 * xd[face] <= 4 * sum(xf[face].values()) + sum(xd[face+d] for d in SolidGridGraph.directions))
+            # model.add_constraint(4 * xd[face] <= 4 * sum(xf[face].values()) + sum(xd[face+d] for d in SolidGridGraph.directions))
             for edge in xf[face]:
                 # Oriented edge implies the face that orients it
                 model.add_constraint(xf[face][edge] <= xd[face])
@@ -1371,7 +1347,9 @@ class SolidGridGraph(Graph):
                 B_oriented_edge = SolidGridGraph.to_primal_edge(Edge(B, A))
                 model.add_constraint(xuv[A_oriented_edge] + xd[B] <= 1)
                 # Faces must be neighbors if no oriented edge between them exists
-                model.add_constraint(xd[B] >= xd[A] - (xuv[A_oriented_edge] + xuv[B_oriented_edge]))
+                # model.add_constraint(xd[B] >= xd[A] - (xuv[A_oriented_edge] + xuv[B_oriented_edge]))
+                model.add_constraint((xd[A] - xd[B]) - (xuv[A_oriented_edge] + xuv[B_oriented_edge]) <= 0)
+
 
         # Type III cell constraints
         for node in xt:
@@ -1424,44 +1402,135 @@ class SolidGridGraph(Graph):
             current_subtours = combo.dual().interior.get_subtours()
         return combo.dual().interior
 
-    def make_alternating_cycle(start, end):
-        def start_face(step, node):
-            return Graph(SolidGridGraph.bottom_edge(step.t, node)).undirected()
-        def end_face(step, node):
-            return Graph(SolidGridGraph.top_edge(step.t, node)).undirected()
-        def side_face(step, node):
-            return Graph(SolidGridGraph.left_edge(step.t, node), SolidGridGraph.right_edge(step.t, node)).undirected()
-        cycle = SolidGridGraph()
-        cycle.alternating_cycle_nodes = [start]
-        cycle.flipped = Graph()
-        cycle.flipped.alternating_cycle_nodes = cycle.alternating_cycle_nodes
-        cycle.flipped.flipped = cycle
-        if start == end:
-            step = Edge((0, 0), (0, 1))
-            cycle += side_face(step, start)
-            cycle.flipped += side_face(step.rotate_right(), start)
-            return cycle
-        step = Edge((0, 0), end - start) / abs(max(*(end-start)))
-        i = 0
-        node = start
-        while node != end:
-            if i == 0:
-                cycle += start_face(step, node)
-                cycle.flipped += side_face(step, node)
-            if (i+1) % 2 == 0:
-                cycle += side_face(step, node)
+    def test(self, k=None):
+        model = Model(name='test')
+        graph = self.double_directed()
+        boundary = SolidGridGraph(*[edge for edge in graph if (SolidGridGraph.to_dual_edge(edge).s in graph.dual().interior.nodes) != (SolidGridGraph.to_dual_edge(edge).t in graph.dual().interior.nodes)])
+
+        xs = {
+            edge: model.binary_var(name=str(edge)) for edge in graph
+        }
+
+        xvs = {
+            v: {
+                'incoming': [xs[edge] for edge in xs if v == edge.t],
+                'outgoing': [xs[edge] for edge in xs if v == edge.s],
+            } for v in graph.nodes
+        }
+
+        xv = {
+            v: sum(xvs[v]['incoming']+xvs[v]['outgoing']) for v in graph.nodes
+        }
+
+        ccw = {
+            face: model.binary_var(name=f'{str(face)}_ccw') for face in self.dual().interior.nodes
+        }
+
+        cw = {
+            face: model.binary_var(name=f'{str(face)}_cw') for face in self.dual().interior.nodes
+        }
+
+        interior = {
+            face: model.binary_var(name=f'{str(face)}_interior') for face in self.dual().interior.nodes
+        }
+
+        xf = {
+            edge: model.integer_var(name=f'{str(edge)}_flow') for edge in xs
+        }
+
+        for edge in xf:
+            model.add_constraint(xs[edge] <= xf[edge])
+            model.add_constraint(xf[edge] <= len(graph.nodes) * xs[edge], f'{edge}_capacity')
+
+        distinguished = next(node for node in graph.nodes if node not in boundary.nodes)
+
+        for node in xv:
+            x = xv[node]/2
+            incoming = [edge for edge in xf if edge.t == node]
+            outgoing = [edge for edge in xf if edge.s == node]
+            if node == distinguished:
+                model.add_constraint(sum(xf[i] for i in incoming) == 1, f'distinguished_{node}_flow')
+                model.add_constraint(sum(xf[o] for o in outgoing) == sum(xs.values()), f'distinguished_{node}_flow')
             else:
-                cycle.flipped += side_face(step, node)
-            i += 1
-            node += step.t
-            cycle.alternating_cycle_nodes.append(node)
-        if len(cycle) % 2 == 0:
-            cycle += end_face(step, node)
-            cycle.flipped += side_face(step, node)
-        else:
-            cycle += side_face(step, node)
-            cycle.flipped += end_face(step, node)
-        return cycle.undirected()
+                model.add_constraint(sum(xf[o] for o in outgoing) == sum(xf[i] for i in incoming) - x, f'{node}_flow')
+
+        for edge in graph:
+            x, y = SolidGridGraph.to_dual_edge(edge)
+            if x in graph.dual().exterior and y in graph.dual().interior:
+                model.add_constraint(xs[edge] == 0)
+        for edge in xs:
+            model.add_constraint(xs[edge] + xs[edge.switch()] <= 1)
+        for node in xvs:
+            model.add_constraint(sum(xvs[node]['incoming']) <= 1)
+            model.add_constraint(sum(xvs[node]['outgoing']) <= 1)
+            model.add_constraint(sum(xvs[node]['incoming']) == sum(xvs[node]['outgoing']))
+
+        if k is not None:
+            for face in self.dual().interior.nodes:
+                # A cell can't be CCW and CW 
+                model.add_constraint(cw[face] + ccw[face] <= 1)
+                # CCW cells
+                model.add_constraint(ccw[face] <= sum(xs[edge] for edge in SolidGridGraph.box(at=face)))
+                model.add_constraint(sum(xs[edge] for edge in SolidGridGraph.box(at=face)) <= 4*ccw[face])
+                # CW cells
+                model.add_constraint(cw[face] <= sum(xs[edge.switch()] for edge in SolidGridGraph.box(at=face)))
+                model.add_constraint(sum(xs[edge.switch()] for edge in SolidGridGraph.box(at=face)) <= 4*cw[face])
+                # CCW implies interior unless it's also CW
+                model.add_constraint(ccw[face] - cw[face] <= interior[face])
+                model.add_constraint(interior[face] <= ccw[face])
+                # Face with no edges is sometimes on the interior
+                model.add_constraint(sum(interior[n] for n in graph.dual().interior.neighbors(face)) - 3 <= interior[face])
+
+            boundary_nodes = [sum(xvs[node]['incoming'] + xvs[node]['outgoing']) / 2 for node in boundary.nodes]
+            model.add_constraint(sum(boundary_nodes) == len(boundary.nodes)-k)
+            model.add_constraint(sum(xs.values()) == len(graph.nodes)-k)
+
+        # model.add_constraint(sum(xs.values()) == 2*sum(interior.values())+2)
+        model.maximize(sum(xs.values()))
+        model.solve()
+
+        solution = SolidGridGraph(*([] if model.solution is None else [edge for edge in xs if model.solution[str(edge)] > 0.0]), double_directed=False)
+        solution.dual().interior = SolidGridGraph(*[node for node in graph.dual().interior.nodes if model.solution[f'{str(node)}_interior'] > 0]).make_solid()
+        solution.model = model
+        solution.distinguished = distinguished
+        return solution
+
+    def make_alternating_cycle(start, end):
+        if start == end:
+            return SolidGridGraph()
+        step = round(Edge(start, end).direction())
+        nodes = [start]
+        boxes = SolidGridGraph()
+        while nodes[-1] != end:
+            boxes += SolidGridGraph.box(at=nodes[-1])
+            nodes.append(nodes[-1] + step.t)
+        cycle = boxes.border()
+        edge = SolidGridGraph.bottom_edge(direction=step.t, at=start)
+        edges = [edge]
+        while len(edges) < len(cycle.nodes):
+            cycle -= edges[-1].switch()
+            edges.append(Edge(edges[-1].t, cycle.neighbors(edges[-1].t)))
+        alternating_cycle = SolidGridGraph(*edges[::2])
+        alternating_cycle.direction = step.t
+        alternating_cycle.ac_nodes = nodes[:-1]
+        alternating_cycle.flipped = SolidGridGraph(*edges[1::2])
+        alternating_cycle.flipped.direction = step.t
+        alternating_cycle.flipped.ac_nodes = nodes[:-1]
+        return alternating_cycle
+
+    def make_alternating_strip(start, end):
+        alternating_cycle = SolidGridGraph.make_alternating_cycle(start, end)
+        alternating_cycle += SolidGridGraph(*[SolidGridGraph.top_edge(alternating_cycle.direction, at=alternating_cycle.direction+node) for node in alternating_cycle.ac_nodes[::2][:-1]])
+        return alternating_cycle
+
+    def G_F_minus(self, F):
+        dual = self.dual().copy()
+        for edge in F.double_directed():
+            dual -= SolidGridGraph.to_dual_edge(edge)
+        return SolidGridGraph(*dual)
+    
+    # def get_alternating_strips(self, F):
+
 
     def get_alternating_strip(self, edge):
         edge = edge.copy()
@@ -1496,7 +1565,7 @@ class SolidGridGraph(Graph):
             setattr(strip, 'edge', sequence[0])
             setattr(strip, 'perimeter', self.__class__(*perimeter))
             setattr(strip, 'flipped_perimeter', self.__class__(*flipped_perimeter))
-        return strip.undirected()
+        return strip.double_directed()
 
     def get_alternating_strips(self):
         # dual = SolidGridGraph.dual(self)
@@ -1592,7 +1661,7 @@ class SolidGridGraph(Graph):
         return self.__class__.has_hc(next)
 
     def random_thick_solid_grid_graph(n=10):
-        graph = SolidGridGraph() + [round(edge) for edge in SolidGridGraph.box(at=Node(n+0.5, n+0.5)).undirected()]
+        graph = SolidGridGraph() + [round(edge) for edge in SolidGridGraph.box(at=Node(n+0.5, n+0.5)).double_directed()]
         while len(graph.dual(recompute=True).interior.nodes) < n:
             is_solid = False
             nodes = list(graph.dual().interior.nodes)
@@ -1603,7 +1672,7 @@ class SolidGridGraph(Graph):
                 random.shuffle(directions)
                 while not is_solid and len(directions) > 0:
                     d = directions.pop()
-                    face = [round(edge) for edge in SolidGridGraph.box(at=node+d).undirected()]
+                    face = [round(edge) for edge in SolidGridGraph.box(at=node+d).double_directed()]
                     is_solid = (graph + face).is_solid()
                     if is_solid:
                         graph += face

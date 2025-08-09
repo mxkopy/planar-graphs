@@ -33,7 +33,7 @@ for n in range(10, 1000):
         ilp = graph.combination_ilp()
         ilp_n = len(ilp.nodes)
         dt = ilp.model.solve_details.dettime
-        n_cuts = ilp.model.get_cuts()['fractional']
+        n_cuts = sum(ilp.model.get_cuts().values())
         cursor.execute('''INSERT INTO graphs 
                        (id, graph, graph_n, ilp, ilp_n, dt, n_cuts) 
                        VALUES 
@@ -48,5 +48,5 @@ for n in range(10, 1000):
                             n_cuts
                         )
         )
-        print(f'{n} graph_n: {graph_n} ilp_n: {ilp_n} dt: {dt} n_cuts: {n_cuts}\n')
+        print(f'n: {n} nodes: {graph_n} covered: {ilp_n} dt: {dt} n_cuts: {n_cuts}\n')
         conn.commit()

@@ -38,9 +38,9 @@ def visualize_hamiltonian_cycle(name, graph):
     tgraph.write(f'{name}{i}')
 
 def nb():
-    graph = SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))).undirected()
+    graph = SolidGridGraph(((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((2, 1), (2, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((0, 1), (0, 0)), ((0, 0), (1, 0))).double_directed()
     return TikZGraph(graph).add_edges(
-        [TikZEdge.DEFAULT_GRAY_DOTTED(edge) for edge in graph.remove_directed()]
+        [TikZEdge.DEFAULT_GRAY_DOTTED(edge) for edge in graph.single_directed()]
     )
 
 continuity = nb()
@@ -77,7 +77,7 @@ dual_graph_dual = dual_graph.dual()
 dual_graph_tikz = (TikZGraph(*dual_graph) + TikZGraph(*dual_graph_dual.interior).make_bipartite(color={0: 'black', 1: 'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_dual.interior else node)\
     .add_edges(
-        TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()
+        TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.single_directed()
     )\
     .add_foreground(f'\draw node[circle, black, draw, fill=white, scale=0.5, label={{[scale=1.0] above left: exterior}}] at (0.5, 5.5) {{}};')\
     .add_foreground(f'\draw[line width=2pt] {(6.5+(0.25/sqrt(2)), 0.5-(0.25/sqrt(2)))} edge[color=black, ->] {(6.5-(1/sqrt(2)), 0.5 + (1/sqrt(2)))};')\
@@ -91,26 +91,26 @@ dual_graph_bfs = dual_graph.dual().interior.bfs(Node(3.5, 2.5))
 (TikZGraph(*dual_graph) + TikZGraph(*dual_graph_dual.interior).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
-        [TikZEdge(edge) for edge in dual_graph_bfs.remove_directed()], 
-        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()]
+        [TikZEdge(edge) for edge in dual_graph_bfs.single_directed()], 
+        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.single_directed()]
     )\
     .write('dual_graph_bfs_tree')
 
 TikZGraph(*dual_graph)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
-        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()],
-        [TikZEdge(edge, force=True) for edge in dual_graph.remove_directed() if SolidGridGraph.to_primal_edge(edge) not in dual_graph_bfs.undirected()]
+        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.single_directed()],
+        [TikZEdge(edge, force=True) for edge in dual_graph.single_directed() if SolidGridGraph.to_primal_edge(edge) not in dual_graph_bfs.double_directed()]
     )\
     .write('dual_graph_bfs_tree_boundary')
 
 lc_example_dual_tree = dual_graph.longest_cycle()
-lc_example_dual_tree_boundary = SolidGridGraph.boundary_from_dual_tree(lc_example_dual_tree).undirected()
+lc_example_dual_tree_boundary = SolidGridGraph.boundary_from_dual_tree(lc_example_dual_tree).double_directed()
 lc_example = TikZGraph(*dual_graph)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_graph_bfs else node)\
     .add_edges(
-        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.remove_directed()],
-        [TikZEdge(edge, force=True) for edge in lc_example_dual_tree_boundary.remove_directed()]
+        [TikZEdge.DOTTED(TikZEdge.GRAY(edge)) for edge in dual_graph.single_directed()],
+        [TikZEdge(edge, force=True) for edge in lc_example_dual_tree_boundary.single_directed()]
     )
 for dual_node in lc_example_dual_tree.nodes:
     face = SolidGridGraph.box(at=dual_node).intersect(lc_example_dual_tree_boundary)
@@ -164,34 +164,34 @@ nines_dual = nines.dual()
 (TikZGraph(*nines) + TikZGraph(*nines_dual.interior).make_bipartite(color={0:'black',1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node in nines else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.remove_directed()], 
-        [TikZEdge(edge) for edge in nines_dual.interior.remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.single_directed()], 
+        [TikZEdge(edge) for edge in nines_dual.interior.single_directed()]
     )\
     .write('dual_cycle')
 
 (TikZGraph(*nines) + TikZGraph(*nines_dual.interior).make_bipartite(color={0:'black',1:'black'}))\
     .on_nodes(TikZNode.NONE)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.remove_directed()], 
-        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(nines_dual.interior).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.single_directed()], 
+        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(nines_dual.interior).single_directed()]
     )\
     .write('dual_cycle_boundary')
 
-nines_dual_fixed = nines_dual.interior - Graph(Edge((1.5, 0.5), (1.5, 1.5))).undirected()
+nines_dual_fixed = nines_dual.interior - Graph(Edge((1.5, 0.5), (1.5, 1.5))).double_directed()
 
 (TikZGraph(*nines) + TikZGraph(*nines_dual_fixed).make_bipartite(color={0:'black',1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node in nines else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.remove_directed()], 
-        [TikZEdge(edge) for edge in nines_dual_fixed.remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.single_directed()], 
+        [TikZEdge(edge) for edge in nines_dual_fixed.single_directed()]
     )\
     .write('dual_cycle_fixed')
 
 (TikZGraph(*nines) + TikZGraph(*nines_dual_fixed).make_bipartite(color={0:'black',1:'black'}))\
     .on_nodes(TikZNode.NONE)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.remove_directed()], 
-        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(nines_dual_fixed).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in nines.single_directed()], 
+        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(nines_dual_fixed).single_directed()]
     )\
     .write('dual_cycle_boundary_fixed')
 
@@ -202,16 +202,16 @@ cyclic_dual_with_hole_dual = cyclic_dual_with_hole.dual_tree().get_subtours()[0]
 (TikZGraph(*cyclic_dual_with_hole) + TikZGraph(*cyclic_dual_with_hole_dual).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node in cyclic_dual_with_hole else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.remove_directed()], 
-        [TikZEdge(edge) for edge in cyclic_dual_with_hole_dual.remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.single_directed()], 
+        [TikZEdge(edge) for edge in cyclic_dual_with_hole_dual.single_directed()]
     )\
     .write('dual_cycle_with_hole')
 
 (TikZGraph(*cyclic_dual_with_hole) + TikZGraph(*cyclic_dual_with_hole_dual).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(TikZNode.NONE)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.remove_directed()], 
-        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(cyclic_dual_with_hole_dual).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.single_directed()], 
+        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(cyclic_dual_with_hole_dual).single_directed()]
     )\
     .write('dual_cycle_with_hole_boundary')
 
@@ -220,16 +220,16 @@ cyclic_dual_with_hole_dual = cyclic_dual_with_hole_dual - Node(2.5, 1.5)
 (TikZGraph(*cyclic_dual_with_hole) + TikZGraph(*cyclic_dual_with_hole_dual).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node in cyclic_dual_with_hole else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.remove_directed()], 
-        [TikZEdge(edge) for edge in cyclic_dual_with_hole_dual.remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.single_directed()], 
+        [TikZEdge(edge) for edge in cyclic_dual_with_hole_dual.single_directed()]
     )\
     .write('dual_cycle_with_hole_fixed')
 
 (TikZGraph(*cyclic_dual_with_hole) + TikZGraph(*cyclic_dual_with_hole_dual).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(TikZNode.NONE)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.remove_directed()], 
-        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(cyclic_dual_with_hole_dual).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in cyclic_dual_with_hole.single_directed()], 
+        [TikZEdge(edge, force=True) for edge in SolidGridGraph.boundary_from_dual_tree(cyclic_dual_with_hole_dual).single_directed()]
     )\
     .write('dual_cycle_with_hole_boundary_fixed')
 
@@ -240,9 +240,9 @@ dual_pattern_example_1_dual_tree = dual_pattern_example_1.longest_cycle()
 (TikZGraph(*dual_pattern_example_1) + TikZGraph(*dual_pattern_example_1.dual().interior).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_pattern_example_1_dual_tree else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_1.remove_directed()], 
-        [TikZEdge(edge) for edge in dual_pattern_example_1_dual_tree.remove_directed()],
-        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(3, 3)).dual().interior).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_1.single_directed()], 
+        [TikZEdge(edge) for edge in dual_pattern_example_1_dual_tree.single_directed()],
+        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(3, 3)).dual().interior).single_directed()]
     )\
     .write('dual_pattern_example_1')
 
@@ -252,9 +252,9 @@ dual_pattern_example_2_dual_tree = dual_pattern_example_2.longest_cycle()
 (TikZGraph(*dual_pattern_example_2) + TikZGraph(*dual_pattern_example_2.dual().interior).make_bipartite(color={0:'black', 1:'black'}))\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in dual_pattern_example_2_dual_tree else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_2.remove_directed()], 
-        [TikZEdge(edge) for edge in dual_pattern_example_2_dual_tree.remove_directed()],
-        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(5, 1)).dual().interior).remove_directed()]
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in dual_pattern_example_2.single_directed()], 
+        [TikZEdge(edge) for edge in dual_pattern_example_2_dual_tree.single_directed()],
+        [TikZOptions.COLOR('red', TikZEdge(edge, force=True)) for edge in SolidGridGraph.boundary_from_dual_tree(SolidGridGraph.nine_neighborhood(at=Node(5, 1)).dual().interior).single_directed()]
     )\
     .add_foreground(f'\draw node[circle, black, draw, fill=white, scale=0.5] at (5.5, 0.5) {{}};')\
     .write('dual_pattern_example_2')
@@ -264,7 +264,7 @@ dual_pattern_example_2_dual_tree = dual_pattern_example_2.longest_cycle()
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         [TikZEdge(edge, force=True) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0))]],
     )\
     .write('allowed_2x2_1')
@@ -272,7 +272,7 @@ TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5), (0.5, 1.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         [TikZEdge(edge, force=True) for edge in [((1, 2), (1, 1)), ((1, 1), (1, 0))]],
     )\
     .write('allowed_2x2_2')
@@ -280,7 +280,7 @@ TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5), (1.5, 0.5), (1.5, 1.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         [TikZEdge(edge, force=True) for edge in [((1, 2), (1, 1)), ((0, 1), (1, 1))]],
     )\
     .write('allowed_2x2_3')
@@ -289,7 +289,7 @@ TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5), (1.5, 0.5), (0.5, 1.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         [TikZEdge(edge, force=True) for edge in [((1, 2), (1, 1)), ((1, 1), (2, 1)), ((1, 1), (1, 0))]],
         [TikZEdge(edge, force=True) for edge in [((0.5, 0.5), (1.5, 0.5)), ((0.5, 0.5), (0.5, 1.5)), ((0.5, 0.5), (0.5, 0.0)), ((0.5, 1.5), (0.5, 2.0)), ((1.5, 0.5), (1.5, 0.0))]],
     )\
@@ -299,7 +299,7 @@ TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5), (1.5, 1.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         [TikZEdge(edge, force=True) for edge in [((1, 2), (1, 1)), ((1, 1), (2, 1)), ((1, 1), (1, 0)), ((0, 1), (1, 1))]],
     )\
     .write('disallowed_2x2_1')
@@ -308,7 +308,7 @@ TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine
 TikZGraph(*SolidGridGraph.nine_neighborhood(at=Node(1, 1)), *SolidGridGraph.nine_neighborhood(at=Node(1, 1)).dual().interior)\
     .on_nodes(lambda node: TikZNode.NONE(node) if node not in [(0.5, 0.5), (1.5, 1.5), (0.5, 1.5), (1.5, 0.5)] else node)\
     .add_edges(
-        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).remove_directed()],
+        [TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in SolidGridGraph.nine_neighborhood(at=Node(1, 1)).single_directed()],
         # [TikZEdge(edge, force=True) for edge in [((0, 1), (1, 1))]],
     )\
     .write('disallowed_2x2_2')
@@ -352,19 +352,19 @@ for graph in [
     ORANGE = lambda edge: TikZOptions.COLOR('orange', OVERLAY(TikZEdge(edge, force=True), 3))
 
     first_iteration = (TikZGraph(*list(graph)).make_bipartite(color={0:'white', 1: 'white'}) + TikZGraph(*list(dual.interior)).make_bipartite())\
-        .add_edges([RED(edge) for edge in sum(graph.dual_tree().get_subtours(), start=Graph()).remove_directed() ])\
-        .add_edges([TikZEdge(edge, force=True) for edge in graph.dual_tree().remove_directed()])\
-        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+        .add_edges([RED(edge) for edge in sum(graph.dual_tree().get_subtours(), start=Graph()).single_directed() ])\
+        .add_edges([TikZEdge(edge, force=True) for edge in graph.dual_tree().single_directed()])\
+        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.single_directed()])\
 
     first_iteration.write(f'uot{i}_first')
 
     graph = (TikZGraph(*list(graph)).make_bipartite(color={0:'white', 1: 'white'}) + TikZGraph(*list(dual.interior)).make_bipartite())\
-        .add_edges([BLUE(edge) for edge in blue.remove_directed()])\
-        .add_edges([RED(edge) for edge in red.remove_directed()])\
-        .add_edges([GREEN(edge) for edge in green.remove_directed()])\
-        .add_edges([ORANGE(edge) for edge in orange.remove_directed()])\
-        .add_edges([TikZEdge(edge, force=True) for edge in black.remove_directed()])\
-        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.remove_directed()])\
+        .add_edges([BLUE(edge) for edge in blue.single_directed()])\
+        .add_edges([RED(edge) for edge in red.single_directed()])\
+        .add_edges([GREEN(edge) for edge in green.single_directed()])\
+        .add_edges([ORANGE(edge) for edge in orange.single_directed()])\
+        .add_edges([TikZEdge(edge, force=True) for edge in black.single_directed()])\
+        .add_edges([TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in graph.single_directed()])\
 
     graph.write(f'uot{i}')
     i+=1
@@ -444,7 +444,7 @@ del trail_graph
 # walk_graph.make_bipartite = lambda: ([], walk_graph.nodes, walk_graph.nodes)
 # write_tex('walk', walk_graph, styles=[(['black', '->'], lambda _ : list(walk_graph.src_sink_paths((0, 0), (0, 2) ))[3]), (['black!30'], getEdges)])
 
-path_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
+path_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).double_directed()
 path_graph.add_edges(
     [
         TikZEdge.DIRECTED(edge) for edge in [((1, 0), (1, 1)), ((1, 1), (0, 1)), ((0, 1), (0, 2))]
@@ -457,35 +457,35 @@ path_graph.write('path')
 del path_graph
 
 # first example of a bipartite graph
-solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
+solid_grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (2, 2)), ((2, 1), (3, 1)), ((3, 1), (3, 2)), ((3, 2), (2, 2)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).double_directed()
 solid_grid_graph.make_bipartite()
 solid_grid_graph.add_edges(
     [
-        TikZEdge(edge) for edge in solid_grid_graph.remove_directed()
+        TikZEdge(edge) for edge in solid_grid_graph.single_directed()
     ]
 )
 solid_grid_graph.write('solid')
 del solid_grid_graph
 
-grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).undirected()
+grid_graph = TikZGraph(((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 2)), ((1, 2), (1, 3)), ((1, 3), (2, 3)), ((2, 3), (3, 3)), ((3, 3), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((1, 1), (2, 1)), ((3, 4), (3, 3)), ((3, 4), (4, 4)), ((4, 4), (4, 3)), ((3, 3), (4, 3))).double_directed()
 grid_graph.make_bipartite()
 grid_graph.add_edges(
     [
-        TikZEdge(edge) for edge in grid_graph.remove_directed()
+        TikZEdge(edge) for edge in grid_graph.single_directed()
     ]
 )
 grid_graph.write('grid')
 del grid_graph
 
 # first example of a Hamiltonian path & Hamiltonian cycle
-hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).undirected()
+hamiltonian_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 0), (1, 1)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1))).double_directed()
 hamiltonian_graph.make_bipartite()
 hamiltonian_graph.add_edges(
     [
         TikZEdge.DIRECTED(edge) for edge in list(hamiltonian_graph.hamiltonian_paths((1, 0)))[-2]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in hamiltonian_graph.remove_directed()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in hamiltonian_graph.single_directed()
     ]
 )
 hamiltonian_graph.write('hamiltonian_path')
@@ -497,20 +497,20 @@ hamiltonian_graph.write('hamiltonian_cycle')
 del hamiltonian_graph
 
 # first example of the TST
-travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0))).undirected()
+travelling_salesman_tour_graph = TikZGraph(((0, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((2, 1), (1, 1)), ((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 2), (1, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((1, 0), (2, 0)), ((2, 1), (2, 0))).double_directed()
 travelling_salesman_tour_graph.make_bipartite()
 travelling_salesman_tour_graph.add_edges(
     [
         TikZEdge(edge) for edge in next(SolidGridGraph(*travelling_salesman_tour_graph).travelling_salesman_tours())
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph.remove_directed()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in travelling_salesman_tour_graph.single_directed()
     ]
 )
 travelling_salesman_tour_graph.write('travelling_salesman_tour')
 
 # one_factor.tex
-one_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
+one_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).double_directed()
 one_factor_graph.make_bipartite()
 one_factor_graph.add_edges(
     [
@@ -531,7 +531,7 @@ no_one_factor_graph.write('no_one_factor')
 del no_one_factor_graph
 
 # two_factor.tex
-two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).undirected()
+two_factor_graph = TikZGraph(((0, 2), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((1, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 2), (1, 2)), ((1, 2), (1, 1)), ((1, 2), (2, 2)), ((2, 2), (2, 1)), ((1, 1), (2, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 1)), ((2, 2), (3, 2)), ((3, 2), (3, 1)), ((2, 1), (3, 1)), ((3, 1), (3, 0)), ((2, 0), (3, 0))).double_directed()
 two_factor_graph.make_bipartite()
 two_factor_graph.add_edges(
     [
@@ -542,11 +542,11 @@ two_factor_graph.write('two_factor')
 del two_factor_graph
 
 # no_two_factor.tex
-no_two_factor_graph = TikZGraph(*list(travelling_salesman_tour_graph.keys())).undirected()
+no_two_factor_graph = TikZGraph(*list(travelling_salesman_tour_graph.keys())).double_directed()
 no_two_factor_graph.make_bipartite()
 no_two_factor_graph.add_edges(
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_two_factor_graph.remove_directed()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in no_two_factor_graph.single_directed()
     ]
 )
 no_two_factor_graph.write('no_two_factor')
@@ -574,18 +574,18 @@ else:
         big_two_factor_graph[Edge(Node(edge[0][0], edge[0][1]), Node(edge[1][0], edge[1][1])), assign]
     big_two_factor_graph.two_factor = Graph(*big_tf['twof'])
 
-big_two_factor_graph = big_two_factor_graph.undirected()
+big_two_factor_graph = big_two_factor_graph.double_directed()
 
 strips = big_two_factor_graph.get_alternating_strips()
 static = big_two_factor_graph.static_alternating_strip()
 
 shaded = shade_two_factor(big_two_factor_graph)
-big_two_factor_graph = TikZGraph(*list(big_two_factor_graph)).undirected()
+big_two_factor_graph = TikZGraph(*list(big_two_factor_graph)).double_directed()
 big_two_factor_graph.add_background(*shaded)
 
 big_two_factor_graph.add_edges(
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor.remove_directed()
+        TikZOptions.GRAY(TikZEdge.DOTTED(TikZOptions.style('shorten <', '0', TikZOptions.style('shorten >', '0', TikZEdge(edge))))) for edge in big_two_factor_graph.two_factor.single_directed()
     ]
 )
 
@@ -604,17 +604,17 @@ y1 = (1, 2)
 y2 = (1, 1)
 y3 = (1, 0)
 
-cubic_graph = TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3)).undirected()
+cubic_graph = TikZGraph((x1, y1), (x1, y3), (x2, y2), (x2, y3), (x3, y1), (x3, y2), (x3, y3)).double_directed()
 cubic_graph.make_bipartite()
 cubic_graph.add_edges(
-    [TikZOptions.COLOR('red', edge) for edge in cubic_graph.remove_directed() if edge.s == x2]
+    [TikZOptions.COLOR('red', edge) for edge in cubic_graph.single_directed() if edge.s == x2]
 )
 
 cubic_graph.add_edges(
-    [TikZOptions.COLOR('blue', edge) for edge in cubic_graph.remove_directed() if edge.s == x3]
+    [TikZOptions.COLOR('blue', edge) for edge in cubic_graph.single_directed() if edge.s == x3]
 )
 
-cubic_graph.add_edges(list(cubic_graph.undirected()))
+cubic_graph.add_edges(list(cubic_graph.double_directed()))
 
 cubic_graph.write('cubic_graph')
 del cubic_graph
@@ -637,14 +637,14 @@ cubic_embedding.write('cubic_embedding')
 del cubic_embedding
 
 # type_3_before_flip.tex
-type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
+type_3_before_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).double_directed()
 type_3_before_flip.make_bipartite()
 type_3_before_flip.add_edges(
     [
         TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip.remove_directed()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_before_flip.single_directed()
     ]
 )
 type_3_before_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(1.1, 1);", "\\fill[fill=black!10] (2, 0) rectangle ++(1.1, 1);")
@@ -652,14 +652,14 @@ type_3_before_flip.add_background("\\draw node at (1.5, 0.5) {\\textbf{III}};")
 type_3_before_flip.write('type_3_before_flip')
 del type_3_before_flip
 
-type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).undirected()
+type_3_after_flip = TikZGraph(((0, 1), (1, 1)), ((1, 1), (1, 0)), ((0, 0), (1, 0)), ((2, 1), (3, 1)), ((2, 1), (2, 0)), ((2, 0), (3, 0)), ((1, 1), (2, 1)), ((1, 0), (2, 0))).double_directed()
 type_3_after_flip.make_bipartite()
 type_3_after_flip.add_edges(
     [
         TikZEdge(edge) for edge in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)), ((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (3, 0))]
     ],
     [
-        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip.remove_directed()
+        TikZEdge.GRAY(TikZEdge.DOTTED(edge)) for edge in type_3_after_flip.single_directed()
     ]
 )
 type_3_after_flip.add_background("\\fill[fill=black!10] (-0.1, 0) rectangle ++(3.1, 1);")
@@ -728,10 +728,10 @@ alternating_strip_before_flip = TikZGraph(*alternating_strip_before_flip)
 alternating_strip_before_flip.make_bipartite()
 alternating_strip_before_flip.add_edges(
     [
-        TikZEdge(edge) for edge in longest_strip.remove_directed()
+        TikZEdge(edge) for edge in longest_strip.single_directed()
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_before_flip.two_factor.remove_directed()
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_before_flip.two_factor.single_directed()
     ]
 )
 for node in alternating_strip_before_flip.nodes:
@@ -749,10 +749,10 @@ alternating_strip_after_flip.two_factor = alternating_strip_before_flip.two_fact
 alternating_strip_after_flip.make_bipartite()
 alternating_strip_after_flip.add_edges(
     [
-        TikZEdge(edge) for edge in longest_strip_flipped.remove_directed()
+        TikZEdge(edge) for edge in longest_strip_flipped.single_directed()
     ],
     [
-        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_after_flip.two_factor.remove_directed()
+        TikZOptions.GRAY(TikZEdge.DOTTED(edge)) for edge in alternating_strip_after_flip.two_factor.single_directed()
     ]
 )
 
