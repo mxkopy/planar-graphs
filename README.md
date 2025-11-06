@@ -5,5 +5,5 @@ Running `python gen.py` or `python temp.py` will generate TikZ figures as `.tex`
 `to_tex.py` contains the TikZ "compiler", and is responsible for the logic of rendering graphs into TikZ. 
 `graph.py` implements the algorithms used in the thesis, and its code is closely related to the mathematical formalisms. 
 
-This code was not written with other users in mind. It exists essentially as supplementary to the thesis document. I might someday refactor it to be more usable, at which point it will be on my github: github.com/mxkopy/planar-graphs
+This code was not written with other users in mind. It exists essentially as supplementary to the thesis document. I might someday refactor it to be more usable.
 
