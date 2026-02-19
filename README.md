@@ -6,6 +6,7 @@ Running `python gen.py` or `python temp.py` will generate TikZ figures as `.tex`
 
 `to_tex.py` contains the TikZ "compiler", and is responsible for the logic of rendering graphs into TikZ. 
 `graph.py` implements the algorithms used in the thesis, and its code is closely related to the mathematical formalisms. 
+There is also a useful `graph_drawer.html` page that will let you quickly draw solid grid graphs to paste as coordinates into a script. 
 
 This code was not written with other users in mind. It exists essentially as supplementary to the thesis document. I might someday refactor it to be more readable.
 

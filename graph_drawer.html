@@ -1,0 +1,184 @@
+<html>
+
+<head>
+    <script>
+        const NODE_RADIUS = 2
+        const NODE_DIST  = 50
+        const EDGES = []
+
+        var mouseDownPosition;
+        var mouseUpPosition;
+        var lastMouse;
+        var mousePosition = {x: 0, y: 0};
+        var anchor = {r: -1, c: -1};
+
+        function drawNodes(ctx){
+            ctx.beginPath();
+            for(let r = 0; r < canvas.height; r += NODE_DIST){
+                for(let c = 0; c < canvas.width; c += NODE_DIST){
+                    ctx.fillRect(c, r, 2*NODE_RADIUS, 2*NODE_RADIUS);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawLine(ctx, start, end){
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+        }
+
+        function drawAnchor(ctx){
+            ctx.beginPath();
+            ctx.arc(anchor.c * NODE_DIST + NODE_RADIUS/2.0, anchor.r * NODE_DIST + NODE_RADIUS/2.0, NODE_RADIUS*5, 0, 360);
+            ctx.stroke();
+        }
+
+        function redrawAll(){
+            const canvas = document.getElementById("canvas");
+            if(canvas.getContext){
+                const ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawNodes(ctx);
+                for(const edge of EDGES){
+                    drawLine(ctx, 
+                    {
+                        x: edge.s.c * NODE_DIST + NODE_RADIUS, 
+                        y: edge.s.r * NODE_DIST + NODE_RADIUS
+                    },
+                    {
+                        x: edge.t.c * NODE_DIST + NODE_RADIUS,
+                        y: edge.t.r * NODE_DIST + NODE_RADIUS,
+                    });
+                }
+                drawAnchor(ctx);
+            }
+        }
+
+        function draw(){
+            const canvas = document.getElementById("canvas");
+            canvas.width = document.body.clientWidth;
+            canvas.height = document.body.clientHeight;
+            function coord_to_node(x, y){
+                return {
+                    c: Math.round((x + NODE_RADIUS) / NODE_DIST), 
+                    r: Math.round((y + NODE_RADIUS) / NODE_DIST)
+                }
+            }
+            function node_to_coord(c, r){
+                return {
+                    x: c * NODE_DIST + NODE_RADIUS,
+                    y: r * NODE_DIST + NODE_RADIUS
+                }
+            }
+
+            if(canvas.getContext){
+                const ctx = canvas.getContext("2d");
+                redrawAll();
+                canvas.addEventListener('mousemove', function(event){
+                    if(
+                        (Math.round(mousePosition.x+NODE_RADIUS)/NODE_DIST) != (Math.round(event.x+NODE_RADIUS)/NODE_DIST) |
+                        (Math.round(mousePosition.y+NODE_RADIUS)/NODE_DIST) != (Math.round(event.y+NODE_RADIUS)/NODE_DIST)
+                    )
+                    {
+                        mousePosition.x = event.x;
+                        mousePosition.y = event.y
+                    }
+                });
+                canvas.addEventListener('mousedown', function(event){
+                    lastMouse = 'mouseDown';
+                    mouseDownPosition = {
+                        x: event.x, 
+                        y: event.y
+                    };
+                });
+                canvas.addEventListener('mouseup', function(event){
+                    lastMouse = 'mouseUp';
+                    mouseUpPosition = {
+                        x: event.x, 
+                        y: event.y
+                    };
+
+                    let dc = (2*Math.abs(mouseDownPosition.x - event.x) > NODE_DIST ? event.x < mouseDownPosition.x ? -1 : 1 : 0);
+                    let dr = (2*Math.abs(mouseDownPosition.y - event.y) > NODE_DIST ? event.y < mouseDownPosition.y ? -1 : 1 : 0);
+
+                    if(dc != 0 | dr != 0){
+                        let snode = coord_to_node(mouseDownPosition.x, mouseDownPosition.y);
+                        let tnode = {
+                            c: snode.c + dc,
+                            r: snode.r + dr
+                        }
+                        EDGES.push({
+                            s: snode, t: tnode
+                        });
+                        drawLine(ctx, 
+                            {
+                                x: EDGES[EDGES.length-1].s.c * NODE_DIST + NODE_RADIUS,
+                                y: EDGES[EDGES.length-1].s.r * NODE_DIST + NODE_RADIUS
+                            },
+                            {
+                                x: EDGES[EDGES.length-1].t.c * NODE_DIST + NODE_RADIUS,
+                                y: EDGES[EDGES.length-1].t.r * NODE_DIST + NODE_RADIUS
+                            }
+                        );
+                    }
+                })
+                window.addEventListener('keypress', function(event){
+                    if(event.key == "z"){
+                        EDGES.splice(EDGES.length-1, 1);
+                        redrawAll();
+                    }
+                    if(event.key == "c"){
+                        EDGES.splice(0, EDGES.length);
+                        redrawAll();
+                    }
+                    if(event.key == "a"){
+                        anchor = coord_to_node(mousePosition.x, mousePosition.y);
+                        redrawAll();
+                    }
+
+                    if(event.key == "Enter"){
+                        const nodes = new Set();
+                        for(edge of EDGES){
+                            nodes.add(edge.s);
+                            nodes.add(edge.t);
+                        }
+                        
+                        const edges = EDGES.map(
+                            edge => ({
+                                s: {
+                                    c: edge.s.c - anchor.c,
+                                    r: anchor.r - edge.s.r
+                                },
+                                t: {
+                                    c: edge.t.c - anchor.c,
+                                    r: anchor.r - edge.t.r
+                                }
+                            })
+                        )
+
+                        let nodetostr = node => `(${node.c}, ${node.r})`;
+                        let edgetostr = edge => `(${nodetostr(edge.s)}, ${nodetostr(edge.t)})`;
+                        let edgestr = edges.map(edgetostr).join(", ");
+                        navigator.clipboard.writeText(edgestr);
+                        alert("Copied!");
+                    }
+                })
+            }
+            var mouseDownPosition;
+        }
+        alert("a=set anchor\nc=clear\nz=undo\nenter=copy edges to clipboard");
+        window.onload = draw;
+    </script>
+</head>
+
+<body>
+
+    <canvas id="canvas" height="960" width="960">
+
+    </canvas>
+
+</body>
+
+</html>
